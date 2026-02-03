@@ -123,6 +123,7 @@ public class ManagementDialog {
         dialogStage.initModality(Modality.APPLICATION_MODAL);
         dialogStage.setTitle(i18n("management.title"));
         dialogStage.setScene(new Scene(root, 980, 620));
+        dialogStage.setOnHiding(event -> commitAllDetails());
         dialogStage.showAndWait();
     }
 
@@ -199,6 +200,7 @@ public class ManagementDialog {
         treeView.setShowRoot(false);
         treeView.setCellFactory(listView -> new ProjectTreeCell(this));
         treeView.getSelectionModel().selectedItemProperty().addListener((obs, oldValue, newValue) -> {
+            commitAllDetails();
             NodeData data = newValue != null ? newValue.getValue() : null;
             updateDetailsForSelection(data);
         });
@@ -389,6 +391,14 @@ public class ManagementDialog {
             detailsCustomer.setTimesheetFilenameSuggestion(value);
             onSave.run();
         }
+    }
+
+    private void commitAllDetails() {
+        commitCustomerName();
+        commitCustomerAddress();
+        commitCustomerPropertiesPath();
+        commitCustomerTemplatePath();
+        commitTimesheetNameSuggestion();
     }
 
     private String normalizePath(String value) {
