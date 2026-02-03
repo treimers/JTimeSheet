@@ -1,6 +1,11 @@
 package treimers.net.whathaveyoudone.ui;
 
+import java.util.Comparator;
+import java.util.Locale;
+import java.util.MissingResourceException;
 import java.util.Optional;
+import java.util.ResourceBundle;
+import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
@@ -15,7 +20,10 @@ import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.control.Separator;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.Button;
+import javafx.scene.control.ToolBar;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.layout.BorderPane;
@@ -30,16 +38,30 @@ import treimers.net.whathaveyoudone.model.Project;
 import treimers.net.whathaveyoudone.model.Task;
 
 public class ManagementDialog {
+    private static final Color TOOLBAR_ICON_COLOR = Color.web("#2563eb");
+    private static final Color TOOLBAR_ICON_HOVER_COLOR = Color.web("#1d4ed8");
+    private static final String TOOLBAR_BUTTON_HOVER_STYLE = "-fx-background-color: rgba(37, 99, 235, 0.12);";
+    private static final String TOOLBAR_BUTTON_NORMAL_STYLE = "";
     private final ObservableList<Customer> customers;
     private final Runnable onSave;
     private final ActivityCallbacks activityCallbacks;
+    private final ResourceBundle messages;
+    private final Locale locale;
     private TreeView<NodeData> treeView;
     private TreeItem<NodeData> rootItem;
 
-    public ManagementDialog(ObservableList<Customer> customers, Runnable onSave, ActivityCallbacks activityCallbacks) {
+    public ManagementDialog(
+        ObservableList<Customer> customers,
+        Runnable onSave,
+        ActivityCallbacks activityCallbacks,
+        ResourceBundle messages,
+        Locale locale
+    ) {
         this.customers = customers;
         this.onSave = onSave;
         this.activityCallbacks = activityCallbacks;
+        this.messages = messages;
+        this.locale = locale;
     }
 
     public void show(Stage owner) {
@@ -51,38 +73,52 @@ public class ManagementDialog {
             taskMenu()
         );
 
-        VBox treePanel = new VBox(10, sectionHeader("Customers, Projects, and Tasks"), treeView);
+        ToolBar toolBar = new ToolBar(
+            toolbarButton(i18n("management.add.customer"), "add", this::addCustomer),
+            toolbarButton(i18n("management.add.project"), "add", this::addProject),
+            toolbarButton(i18n("management.add.task"), "add", this::addTask),
+            new Separator(),
+            toolbarButton(i18n("management.rename.customer"), "edit", this::renameCustomer),
+            toolbarButton(i18n("management.rename.project"), "edit", this::renameProject),
+            toolbarButton(i18n("management.rename.task"), "edit", this::renameTask),
+            new Separator(),
+            toolbarButton(i18n("management.delete.customer"), "delete", this::deleteCustomer),
+            toolbarButton(i18n("management.delete.project"), "delete", this::deleteProject),
+            toolbarButton(i18n("management.delete.task"), "delete", this::deleteTask)
+        );
+
+        VBox treePanel = new VBox(10, sectionHeader(i18n("management.section.title")), treeView);
         treePanel.setPadding(new Insets(12));
         VBox.setVgrow(treeView, Priority.ALWAYS);
 
         BorderPane root = new BorderPane();
-        root.setTop(menuBar);
+        root.setTop(new VBox(menuBar, toolBar));
         root.setCenter(treePanel);
         BorderPane.setMargin(treePanel, new Insets(10));
 
         Stage dialog = new Stage();
         dialog.initOwner(owner);
         dialog.initModality(Modality.APPLICATION_MODAL);
-        dialog.setTitle("Manage Customers, Projects, and Tasks");
+        dialog.setTitle(i18n("management.title"));
         dialog.setScene(new Scene(root, 520, 480));
         dialog.showAndWait();
     }
 
     ContextMenu emptyMenu() {
-        MenuItem addCustomer = menuItemWithIcon("Add Customer", "add", this::addCustomer);
+        MenuItem addCustomer = menuItemWithIcon(i18n("management.add.customer"), "add", this::addCustomer);
         return new ContextMenu(addCustomer);
     }
 
     ContextMenu contextMenuFor(NodeData data) {
-        MenuItem addCustomer = menuItemWithIcon("Add Customer", "add", this::addCustomer);
-        MenuItem addProject = menuItemWithIcon("Add Project", "add", this::addProject);
-        MenuItem addTask = menuItemWithIcon("Add Task", "add", this::addTask);
-        MenuItem renameCustomer = menuItemWithIcon("Rename Customer", "edit", this::renameCustomer);
-        MenuItem deleteCustomer = menuItemWithIcon("Delete Customer", "delete", this::deleteCustomer);
-        MenuItem renameProject = menuItemWithIcon("Rename Project", "edit", this::renameProject);
-        MenuItem deleteProject = menuItemWithIcon("Delete Project", "delete", this::deleteProject);
-        MenuItem renameTask = menuItemWithIcon("Rename Task", "edit", this::renameTask);
-        MenuItem deleteTask = menuItemWithIcon("Delete Task", "delete", this::deleteTask);
+        MenuItem addCustomer = menuItemWithIcon(i18n("management.add.customer"), "add", this::addCustomer);
+        MenuItem addProject = menuItemWithIcon(i18n("management.add.project"), "add", this::addProject);
+        MenuItem addTask = menuItemWithIcon(i18n("management.add.task"), "add", this::addTask);
+        MenuItem renameCustomer = menuItemWithIcon(i18n("management.rename.customer"), "edit", this::renameCustomer);
+        MenuItem deleteCustomer = menuItemWithIcon(i18n("management.delete.customer"), "delete", this::deleteCustomer);
+        MenuItem renameProject = menuItemWithIcon(i18n("management.rename.project"), "edit", this::renameProject);
+        MenuItem deleteProject = menuItemWithIcon(i18n("management.delete.project"), "delete", this::deleteProject);
+        MenuItem renameTask = menuItemWithIcon(i18n("management.rename.task"), "edit", this::renameTask);
+        MenuItem deleteTask = menuItemWithIcon(i18n("management.delete.task"), "delete", this::deleteTask);
 
         ContextMenu menu = new ContextMenu();
         if (data.type == NodeType.CUSTOMER) {
@@ -98,31 +134,31 @@ public class ManagementDialog {
     }
 
     private Menu customerMenu() {
-        MenuItem add = menuItemWithIcon("Add Customer", "add", this::addCustomer);
-        MenuItem rename = menuItemWithIcon("Rename Customer", "edit", this::renameCustomer);
-        MenuItem delete = menuItemWithIcon("Delete Customer", "delete", this::deleteCustomer);
+        MenuItem add = menuItemWithIcon(i18n("management.add.customer"), "add", this::addCustomer);
+        MenuItem rename = menuItemWithIcon(i18n("management.rename.customer"), "edit", this::renameCustomer);
+        MenuItem delete = menuItemWithIcon(i18n("management.delete.customer"), "delete", this::deleteCustomer);
 
-        Menu menu = new Menu("Customer");
+        Menu menu = new Menu(i18n("management.menu.customer"));
         menu.getItems().addAll(add, rename, delete);
         return menu;
     }
 
     private Menu projectMenu() {
-        MenuItem add = menuItemWithIcon("Add Project", "add", this::addProject);
-        MenuItem rename = menuItemWithIcon("Rename Project", "edit", this::renameProject);
-        MenuItem delete = menuItemWithIcon("Delete Project", "delete", this::deleteProject);
+        MenuItem add = menuItemWithIcon(i18n("management.add.project"), "add", this::addProject);
+        MenuItem rename = menuItemWithIcon(i18n("management.rename.project"), "edit", this::renameProject);
+        MenuItem delete = menuItemWithIcon(i18n("management.delete.project"), "delete", this::deleteProject);
 
-        Menu menu = new Menu("Project");
+        Menu menu = new Menu(i18n("management.menu.project"));
         menu.getItems().addAll(add, rename, delete);
         return menu;
     }
 
     private Menu taskMenu() {
-        MenuItem add = menuItemWithIcon("Add Task", "add", this::addTask);
-        MenuItem rename = menuItemWithIcon("Rename Task", "edit", this::renameTask);
-        MenuItem delete = menuItemWithIcon("Delete Task", "delete", this::deleteTask);
+        MenuItem add = menuItemWithIcon(i18n("management.add.task"), "add", this::addTask);
+        MenuItem rename = menuItemWithIcon(i18n("management.rename.task"), "edit", this::renameTask);
+        MenuItem delete = menuItemWithIcon(i18n("management.delete.task"), "delete", this::deleteTask);
 
-        Menu menu = new Menu("Task");
+        Menu menu = new Menu(i18n("management.menu.task"));
         menu.getItems().addAll(add, rename, delete);
         return menu;
     }
@@ -162,10 +198,11 @@ public class ManagementDialog {
     }
 
     private void addCustomer() {
-        Optional<String> name = promptForText("New Customer", "Customer name:");
+        Optional<String> name = promptForText(i18n("management.customer.new.title"), i18n("management.customer.new.label"));
         name.ifPresent(value -> {
             Customer customer = new Customer(value);
             customers.add(customer);
+            sortCustomers();
             rebuildTree();
             selectCustomer(customer);
             onSave.run();
@@ -175,14 +212,17 @@ public class ManagementDialog {
     private void renameCustomer() {
         Customer customer = getSelectedCustomer();
         if (customer == null) {
-            showInfo("Select a customer to rename.");
+            showInfo(i18n("management.customer.select.rename"));
             return;
         }
-        Optional<String> name = promptForText("Rename Customer", "New customer name:", customer.getName());
+        Optional<String> name = promptForText(
+            i18n("management.customer.rename.title"),
+            i18n("management.customer.rename.label"),
+            customer.getName()
+        );
         name.ifPresent(value -> {
-            String oldName = customer.getName();
             customer.setName(value);
-            activityCallbacks.updateActivitiesForCustomerRename(oldName, value);
+            sortCustomers();
             rebuildTree();
             selectCustomer(customer);
             onSave.run();
@@ -192,17 +232,17 @@ public class ManagementDialog {
     private void deleteCustomer() {
         Customer customer = getSelectedCustomer();
         if (customer == null) {
-            showInfo("Select a customer to delete.");
+            showInfo(i18n("management.customer.select.delete"));
             return;
         }
-        int activityCount = activityCallbacks.countActivitiesForCustomer(customer.getName());
-        String message = "Delete customer \"" + customer.getName() + "\"?";
+        int activityCount = activityCallbacks.countActivitiesForCustomer(customer.getId());
+        String message = i18n("management.customer.delete.message", customer.getName());
         if (activityCount > 0) {
-            message += " This will remove " + activityCount + " activities.";
+            message += " " + i18n("management.delete.activities", activityCount);
         }
-        if (confirmDelete("Delete customer", message)) {
+        if (confirmDelete(i18n("management.customer.delete.title"), message)) {
             customers.remove(customer);
-            activityCallbacks.removeActivitiesForCustomer(customer.getName());
+            activityCallbacks.removeActivitiesForCustomer(customer.getId());
             rebuildTree();
             onSave.run();
         }
@@ -211,13 +251,14 @@ public class ManagementDialog {
     private void addProject() {
         Customer customer = getSelectedCustomer();
         if (customer == null) {
-            showInfo("Select a customer first.");
+            showInfo(i18n("management.customer.select.first"));
             return;
         }
-        Optional<String> name = promptForText("New Project", "Project name:");
+        Optional<String> name = promptForText(i18n("management.project.new.title"), i18n("management.project.new.label"));
         name.ifPresent(value -> {
             Project project = new Project(value);
             customer.getProjects().add(project);
+            sortProjects(customer);
             rebuildTree();
             selectProject(customer, project);
             onSave.run();
@@ -227,14 +268,17 @@ public class ManagementDialog {
     private void renameProject() {
         SelectedProject selected = getSelectedProject();
         if (selected == null) {
-            showInfo("Select a project to rename.");
+            showInfo(i18n("management.project.select.rename"));
             return;
         }
-        Optional<String> name = promptForText("Rename Project", "New project name:", selected.project.getName());
+        Optional<String> name = promptForText(
+            i18n("management.project.rename.title"),
+            i18n("management.project.rename.label"),
+            selected.project.getName()
+        );
         name.ifPresent(value -> {
-            String oldName = selected.project.getName();
             selected.project.setName(value);
-            activityCallbacks.updateActivitiesForProjectRename(selected.customer.getName(), oldName, value);
+            sortProjects(selected.customer);
             rebuildTree();
             selectProject(selected.customer, selected.project);
             onSave.run();
@@ -244,20 +288,20 @@ public class ManagementDialog {
     private void deleteProject() {
         SelectedProject selected = getSelectedProject();
         if (selected == null) {
-            showInfo("Select a project to delete.");
+            showInfo(i18n("management.project.select.delete"));
             return;
         }
         int activityCount = activityCallbacks.countActivitiesForProject(
-            selected.customer.getName(),
-            selected.project.getName()
+            selected.customer.getId(),
+            selected.project.getId()
         );
-        String message = "Delete project \"" + selected.project.getName() + "\"?";
+        String message = i18n("management.project.delete.message", selected.project.getName());
         if (activityCount > 0) {
-            message += " This will remove " + activityCount + " activities.";
+            message += " " + i18n("management.delete.activities", activityCount);
         }
-        if (confirmDelete("Delete project", message)) {
+        if (confirmDelete(i18n("management.project.delete.title"), message)) {
             selected.customer.getProjects().remove(selected.project);
-            activityCallbacks.removeActivitiesForProject(selected.customer.getName(), selected.project.getName());
+            activityCallbacks.removeActivitiesForProject(selected.customer.getId(), selected.project.getId());
             rebuildTree();
             selectCustomer(selected.customer);
             onSave.run();
@@ -267,12 +311,13 @@ public class ManagementDialog {
     private void addTask() {
         SelectedProject selected = getSelectedProject();
         if (selected == null) {
-            showInfo("Select a project first.");
+            showInfo(i18n("management.project.select.first"));
             return;
         }
-        Optional<String> name = promptForText("New Task", "Task name:");
+        Optional<String> name = promptForText(i18n("management.task.new.title"), i18n("management.task.new.label"));
         name.ifPresent(value -> {
             selected.project.getTasks().add(new Task(value));
+            sortTasks(selected.project);
             rebuildTree();
             selectTask(selected.customer, selected.project, value);
             onSave.run();
@@ -282,21 +327,19 @@ public class ManagementDialog {
     private void renameTask() {
         SelectedTask selected = getSelectedTask();
         if (selected == null) {
-            showInfo("Select a task to rename.");
+            showInfo(i18n("management.task.select.rename"));
             return;
         }
-        Optional<String> name = promptForText("Rename Task", "New task name:", selected.task.getName());
+        Optional<String> name = promptForText(
+            i18n("management.task.rename.title"),
+            i18n("management.task.rename.label"),
+            selected.task.getName()
+        );
         name.ifPresent(value -> {
             int index = selected.project.getTasks().indexOf(selected.task);
             if (index >= 0) {
-                String oldName = selected.task.getName();
                 selected.project.getTasks().set(index, new Task(value));
-                activityCallbacks.updateActivitiesForTaskRename(
-                    selected.customer.getName(),
-                    selected.project.getName(),
-                    oldName,
-                    value
-                );
+                sortTasks(selected.project);
                 rebuildTree();
                 selectTask(selected.customer, selected.project, value);
                 onSave.run();
@@ -307,24 +350,24 @@ public class ManagementDialog {
     private void deleteTask() {
         SelectedTask selected = getSelectedTask();
         if (selected == null) {
-            showInfo("Select a task to delete.");
+            showInfo(i18n("management.task.select.delete"));
             return;
         }
         int activityCount = activityCallbacks.countActivitiesForTask(
-            selected.customer.getName(),
-            selected.project.getName(),
-            selected.task.getName()
+            selected.customer.getId(),
+            selected.project.getId(),
+            selected.task.getId()
         );
-        String message = "Delete task \"" + selected.task.getName() + "\"?";
+        String message = i18n("management.task.delete.message", selected.task.getName());
         if (activityCount > 0) {
-            message += " This will remove " + activityCount + " activities.";
+            message += " " + i18n("management.delete.activities", activityCount);
         }
-        if (confirmDelete("Delete task", message)) {
+        if (confirmDelete(i18n("management.task.delete.title"), message)) {
             selected.project.getTasks().remove(selected.task);
             activityCallbacks.removeActivitiesForTask(
-                selected.customer.getName(),
-                selected.project.getName(),
-                selected.task.getName()
+                selected.customer.getId(),
+                selected.project.getId(),
+                selected.task.getId()
             );
             rebuildTree();
             selectProject(selected.customer, selected.project);
@@ -421,13 +464,13 @@ public class ManagementDialog {
         TextInputDialog dialog = new TextInputDialog(initialValue);
         dialog.setTitle(title);
         dialog.setHeaderText(header);
-        dialog.setContentText("Name:");
+        dialog.setContentText(i18n("label.name"));
         return dialog.showAndWait().map(String::trim).filter(value -> !value.isEmpty());
     }
 
     private boolean confirmDelete(String title, String content) {
-        ButtonType delete = new ButtonType("Delete", ButtonData.OK_DONE);
-        ButtonType cancel = new ButtonType("Cancel", ButtonData.CANCEL_CLOSE);
+        ButtonType delete = new ButtonType(i18n("button.delete"), ButtonData.OK_DONE);
+        ButtonType cancel = new ButtonType(i18n("button.cancel"), ButtonData.CANCEL_CLOSE);
         Alert alert = new Alert(AlertType.CONFIRMATION, content, delete, cancel);
         alert.setTitle(title);
         alert.setHeaderText(null);
@@ -440,6 +483,41 @@ public class ManagementDialog {
         alert.showAndWait();
     }
 
+    private void sortCustomers() {
+        FXCollections.sort(customers, Comparator.comparing(customer -> sortKey(customer.getName())));
+        for (Customer customer : customers) {
+            sortProjects(customer);
+        }
+    }
+
+    private void sortProjects(Customer customer) {
+        FXCollections.sort(customer.getProjects(), Comparator.comparing(project -> sortKey(project.getName())));
+        for (Project project : customer.getProjects()) {
+            sortTasks(project);
+        }
+    }
+
+    private void sortTasks(Project project) {
+        FXCollections.sort(project.getTasks(), Comparator.comparing(task -> sortKey(task.getName())));
+    }
+
+    private String sortKey(String value) {
+        return value == null ? "" : value.toLowerCase();
+    }
+
+    private String i18n(String key, Object... args) {
+        String value;
+        try {
+            value = messages.getString(key);
+        } catch (MissingResourceException exception) {
+            value = key;
+        }
+        if (args == null || args.length == 0) {
+            return value;
+        }
+        return String.format(locale, value, args);
+    }
+
     private MenuItem menuItemWithIcon(String text, String iconKey, Runnable action) {
         MenuItem item = new MenuItem(text);
         item.setGraphic(iconFor(iconKey));
@@ -447,7 +525,19 @@ public class ManagementDialog {
         return item;
     }
 
+    private Button toolbarButton(String text, String iconKey, Runnable action) {
+        SVGPath icon = iconPath(iconKey, TOOLBAR_ICON_COLOR);
+        Button button = new Button(text, icon);
+        button.setOnAction(event -> action.run());
+        applyToolbarHover(button, icon);
+        return button;
+    }
+
     private Node iconFor(String iconKey) {
+        return iconPath(iconKey, Color.web("#4b5563"));
+    }
+
+    private SVGPath iconPath(String iconKey, Color color) {
         SVGPath path = new SVGPath();
         switch (iconKey) {
             case "add":
@@ -463,9 +553,25 @@ public class ManagementDialog {
                 path.setContent("M2 2h12v12H2z");
                 break;
         }
-        path.setFill(Color.web("#4b5563"));
+        path.setFill(color);
         path.setScaleX(1.1);
         path.setScaleY(1.1);
         return path;
+    }
+
+    private void applyToolbarHover(Button button, SVGPath icon) {
+        button.hoverProperty().addListener((obs, wasHovered, isHovered) -> {
+            if (button.isDisabled()) {
+                return;
+            }
+            icon.setFill(isHovered ? TOOLBAR_ICON_HOVER_COLOR : TOOLBAR_ICON_COLOR);
+            button.setStyle(isHovered ? TOOLBAR_BUTTON_HOVER_STYLE : TOOLBAR_BUTTON_NORMAL_STYLE);
+        });
+        button.disabledProperty().addListener((obs, wasDisabled, isDisabled) -> {
+            if (!isDisabled) {
+                icon.setFill(button.isHover() ? TOOLBAR_ICON_HOVER_COLOR : TOOLBAR_ICON_COLOR);
+                button.setStyle(button.isHover() ? TOOLBAR_BUTTON_HOVER_STYLE : TOOLBAR_BUTTON_NORMAL_STYLE);
+            }
+        });
     }
 }

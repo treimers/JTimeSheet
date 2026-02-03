@@ -10,45 +10,45 @@ import javafx.beans.property.StringProperty;
 public class Activity {
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
-    private final StringProperty customerName;
-    private final StringProperty projectName;
-    private final StringProperty taskName;
+    private final StringProperty customerId;
+    private final StringProperty projectId;
+    private final StringProperty taskId;
     private final StringProperty from;
     private final StringProperty to;
     private final StringProperty duration;
 
-    public Activity(String customerName, String projectName, String taskName, String from, String to) {
-        this.customerName = new SimpleStringProperty(customerName);
-        this.projectName = new SimpleStringProperty(projectName);
-        this.taskName = new SimpleStringProperty(taskName);
+    public Activity(String customerId, String projectId, String taskId, String from, String to) {
+        this.customerId = new SimpleStringProperty(customerId);
+        this.projectId = new SimpleStringProperty(projectId);
+        this.taskId = new SimpleStringProperty(taskId);
         this.from = new SimpleStringProperty(from);
         this.to = new SimpleStringProperty(to);
         this.duration = new SimpleStringProperty();
         updateDuration();
     }
 
-    public String getCustomerName() {
-        return customerName.get();
+    public String getCustomerId() {
+        return customerId.get();
     }
 
-    public void setCustomerName(String value) {
-        customerName.set(value);
+    public void setCustomerId(String value) {
+        customerId.set(value);
     }
 
-    public String getProjectName() {
-        return projectName.get();
+    public String getProjectId() {
+        return projectId.get();
     }
 
-    public void setProjectName(String value) {
-        projectName.set(value);
+    public void setProjectId(String value) {
+        projectId.set(value);
     }
 
-    public String getTaskName() {
-        return taskName.get();
+    public String getTaskId() {
+        return taskId.get();
     }
 
-    public void setTaskName(String value) {
-        taskName.set(value);
+    public void setTaskId(String value) {
+        taskId.set(value);
     }
 
     public String getFrom() {
@@ -69,16 +69,16 @@ public class Activity {
         updateDuration();
     }
 
-    public StringProperty customerNameProperty() {
-        return customerName;
+    public StringProperty customerIdProperty() {
+        return customerId;
     }
 
-    public StringProperty projectNameProperty() {
-        return projectName;
+    public StringProperty projectIdProperty() {
+        return projectId;
     }
 
-    public StringProperty taskNameProperty() {
-        return taskName;
+    public StringProperty taskIdProperty() {
+        return taskId;
     }
 
     public StringProperty fromProperty() {

@@ -1,13 +1,10 @@
 package treimers.net.whathaveyoudone.ui;
 
 public interface ActivityCallbacks {
-    int countActivitiesForCustomer(String customerName);
-    int countActivitiesForProject(String customerName, String projectName);
-    int countActivitiesForTask(String customerName, String projectName, String taskName);
-    void updateActivitiesForCustomerRename(String oldName, String newName);
-    void updateActivitiesForProjectRename(String customerName, String oldName, String newName);
-    void updateActivitiesForTaskRename(String customerName, String projectName, String oldName, String newName);
-    void removeActivitiesForCustomer(String customerName);
-    void removeActivitiesForProject(String customerName, String projectName);
-    void removeActivitiesForTask(String customerName, String projectName, String taskName);
+    int countActivitiesForCustomer(String customerId);
+    int countActivitiesForProject(String customerId, String projectId);
+    int countActivitiesForTask(String customerId, String projectId, String taskId);
+    void removeActivitiesForCustomer(String customerId);
+    void removeActivitiesForProject(String customerId, String projectId);
+    void removeActivitiesForTask(String customerId, String projectId, String taskId);
 }
