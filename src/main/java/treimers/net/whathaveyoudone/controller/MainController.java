@@ -85,6 +85,7 @@ import treimers.net.whathaveyoudone.ui.ActivityInput;
 import treimers.net.whathaveyoudone.ui.ManagementDialog;
 import treimers.net.whathaveyoudone.service.SettingsService;
 import treimers.net.whathaveyoudone.service.StorageService;
+import treimers.net.whathaveyoudone.service.TimesheetWriter;
 import treimers.net.whathaveyoudone.view.ActivityDialogView;
 import treimers.net.whathaveyoudone.view.SettingsDialogView;
 import treimers.net.whathaveyoudone.view.MainView;
@@ -122,6 +123,7 @@ public class MainController {
     private MenuItem manageMenuItem;
     private MenuItem importCsvMenuItem;
     private MenuItem exportCsvMenuItem;
+    private MenuItem writeTimesheetMenuItem;
     private MenuItem addActivityMenuItem;
     private MenuItem editActivityMenuItem;
     private MenuItem deleteActivityMenuItem;
@@ -130,6 +132,7 @@ public class MainController {
     private MenuItem contextAddActivityItem;
     private MenuItem contextEditActivityItem;
     private MenuItem contextDeleteActivityItem;
+    private Button writeTimesheetButton;
     private Label totalHoursLabel;
     private Label activitiesHeaderLabel;
     private ComboBox<Customer> customerFilter;
@@ -220,9 +223,10 @@ public class MainController {
     private Menu fileMenu() {
         importCsvMenuItem = menuItemWithIcon(i18n("menu.file.import"), "import", this::importCsv);
         exportCsvMenuItem = menuItemWithIcon(i18n("menu.file.export"), "export", this::exportCsv);
+        writeTimesheetMenuItem = menuItemWithIcon(i18n("menu.file.timesheet"), "export", this::writeTimesheet);
 
         fileMenu = new Menu(i18n("menu.file"));
-        fileMenu.getItems().addAll(importCsvMenuItem, exportCsvMenuItem);
+        fileMenu.getItems().addAll(importCsvMenuItem, exportCsvMenuItem, writeTimesheetMenuItem);
         return fileMenu;
     }
 
@@ -277,6 +281,7 @@ public class MainController {
         Button askNowButton = toolbarButton(i18n("menu.activity.ask"), "reminder", this::showHourlyPrompt);
         Button importButton = toolbarButton(i18n("menu.file.import"), "import", this::importCsv);
         Button exportButton = toolbarButton(i18n("menu.file.export"), "export", this::exportCsv);
+        writeTimesheetButton = toolbarButton(i18n("menu.file.timesheet"), "export", this::writeTimesheet);
         Button settingsButton = toolbarButton(i18n("menu.settings.open"), "manage", this::openSettingsDialog);
 
         editButton.disableProperty().bind(activityTable.getSelectionModel().selectedItemProperty().isNull());
@@ -292,6 +297,7 @@ public class MainController {
             new Separator(),
             importButton,
             exportButton,
+            writeTimesheetButton,
             new Separator(),
             settingsButton
         );
@@ -440,6 +446,12 @@ public class MainController {
         customerFilter.setPrefWidth(180);
         customerFilter.setButtonCell(createCustomerFilterCell(i18n("filter.customer.placeholder")));
         customerFilter.setCellFactory(listView -> createCustomerFilterCell(i18n("filter.customer.placeholder")));
+        if (writeTimesheetMenuItem != null) {
+            writeTimesheetMenuItem.disableProperty().bind(customerFilter.valueProperty().isNull());
+        }
+        if (writeTimesheetButton != null) {
+            writeTimesheetButton.disableProperty().bind(customerFilter.valueProperty().isNull());
+        }
 
         projectFilter = new ComboBox<>();
         projectFilter.setPromptText(i18n("filter.project.placeholder"));
@@ -1023,6 +1035,106 @@ public class MainController {
         }
     }
 
+    private void writeTimesheet() {
+        if (activities.isEmpty()) {
+            showInfo(i18n("timesheet.none"));
+            return;
+        }
+        Customer selectedCustomer = customerFilter.getValue();
+        if (selectedCustomer == null) {
+            showInfo(i18n("timesheet.customer.required"));
+            return;
+        }
+        Path propertiesPath = resolveCustomerFile(selectedCustomer.getTimesheetPropertiesPath());
+        if (propertiesPath == null) {
+            showInfo(i18n("timesheet.customer.missing.properties", selectedCustomer.getName()));
+            return;
+        }
+        Path templatePath = resolveCustomerFile(selectedCustomer.getTimesheetTemplatePath());
+        if (templatePath == null) {
+            showInfo(i18n("timesheet.customer.missing.template", selectedCustomer.getName()));
+            return;
+        }
+        File outputFile = chooseTimesheetOutputFile(selectedCustomer, templatePath);
+        if (outputFile == null) {
+            return;
+        }
+        List<Activity> exportActivities = filteredActivities != null
+            ? new ArrayList<>(filteredActivities)
+            : new ArrayList<>(activities);
+        exportActivities.removeIf(activity -> !selectedCustomer.getId().equals(activity.getCustomerId()));
+        TimesheetWriter writer = new TimesheetWriter();
+        try {
+            writer.writeTimesheet(
+                propertiesPath,
+                templatePath,
+                outputFile.toPath(),
+                exportActivities,
+                this::resolveCustomerName,
+                this::resolveProjectName,
+                this::resolveTaskName
+            );
+        } catch (IOException | IllegalArgumentException exception) {
+            showInfo(i18n("timesheet.write.error", exception.getMessage()));
+        }
+    }
+
+    private File chooseTimesheetOutputFile(Customer customer, Path templatePath) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle(i18n("timesheet.output.title"));
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
+            i18n("timesheet.output.filter"),
+            "*.xls",
+            "*.xlsx"
+        ));
+        applyInitialFile(chooser, templatePath != null ? templatePath.toString() : null);
+        String extension = resolveTemplateExtension(templatePath);
+        String suggestion = customer != null ? customer.getTimesheetFilenameSuggestion() : null;
+        if (suggestion != null && !suggestion.isBlank()) {
+            chooser.setInitialFileName(suggestion.trim() + extension);
+        } else if (customer != null && customer.getName() != null && !customer.getName().isBlank()) {
+            chooser.setInitialFileName(customer.getName().trim() + "-timesheet" + extension);
+        }
+        File file = chooser.showSaveDialog(primaryStage);
+        return file;
+    }
+
+    private String resolveTemplateExtension(Path templatePath) {
+        if (templatePath == null) {
+            return ".xlsx";
+        }
+        String name = templatePath.getFileName().toString().toLowerCase();
+        if (name.endsWith(".xls")) {
+            return ".xls";
+        }
+        if (name.endsWith(".xlsx")) {
+            return ".xlsx";
+        }
+        return ".xlsx";
+    }
+
+    private Path resolveCustomerFile(String path) {
+        if (path == null || path.isBlank()) {
+            return null;
+        }
+        Path resolved = Paths.get(path.trim());
+        return Files.exists(resolved) ? resolved : null;
+    }
+
+    private void applyInitialFile(FileChooser chooser, String path) {
+        if (path == null || path.isBlank()) {
+            return;
+        }
+        File file = new File(path);
+        File directory = file.isDirectory() ? file : file.getParentFile();
+        if (directory != null && directory.exists()) {
+            chooser.setInitialDirectory(directory);
+        }
+        if (file.isFile()) {
+            chooser.setInitialFileName(file.getName());
+        }
+    }
+
     private List<Activity> parseCsvLines(List<String> lines) {
         List<Activity> result = new ArrayList<>();
         if (lines.isEmpty()) {
@@ -1596,7 +1708,14 @@ public class MainController {
             if (data != null && data.customers != null) {
                 for (CustomerData customerData : data.customers) {
                     String customerId = customerData.id != null ? customerData.id : UUID.randomUUID().toString();
-                    Customer customer = new Customer(customerId, customerData.name);
+                    Customer customer = new Customer(
+                        customerId,
+                        customerData.name,
+                        customerData.address,
+                        customerData.timesheetPropertiesPath,
+                        customerData.timesheetTemplatePath,
+                        customerData.timesheetFilenameSuggestion
+                    );
                     if (customerData.projects != null) {
                         for (ProjectData projectData : customerData.projects) {
                             String projectId = projectData.id != null ? projectData.id : UUID.randomUUID().toString();
@@ -1647,6 +1766,10 @@ public class MainController {
             CustomerData customerData = new CustomerData();
             customerData.id = customer.getId();
             customerData.name = customer.getName();
+            customerData.address = customer.getAddress();
+            customerData.timesheetPropertiesPath = customer.getTimesheetPropertiesPath();
+            customerData.timesheetTemplatePath = customer.getTimesheetTemplatePath();
+            customerData.timesheetFilenameSuggestion = customer.getTimesheetFilenameSuggestion();
             customerData.projects = new ArrayList<>();
             for (Project project : customer.getProjects()) {
                 ProjectData projectData = new ProjectData();
@@ -1784,6 +1907,9 @@ public class MainController {
         }
         if (exportCsvMenuItem != null) {
             exportCsvMenuItem.setText(i18n("menu.file.export"));
+        }
+        if (writeTimesheetMenuItem != null) {
+            writeTimesheetMenuItem.setText(i18n("menu.file.timesheet"));
         }
         if (addActivityMenuItem != null) {
             addActivityMenuItem.setText(i18n("menu.activity.add"));

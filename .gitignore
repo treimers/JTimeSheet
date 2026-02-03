@@ -1,4 +1,6 @@
 .vscode/
 *.csv
+*.xls
+*.properties
 target/
 whathaveyoudone.json

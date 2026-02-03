@@ -1,0 +1,10 @@
+rounding=4.0
+target.sheetno=0
+target.month.row=3
+target.month.column=1
+target.data.row=10
+target.date.column=0
+target.start.column=1
+target.end.column=2
+target.pause.column=3
+target.task.column=7

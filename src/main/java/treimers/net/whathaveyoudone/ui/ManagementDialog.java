@@ -23,14 +23,20 @@ import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Separator;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.Button;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.control.ToolBar;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
+import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import treimers.net.whathaveyoudone.model.Customer;
@@ -49,6 +55,16 @@ public class ManagementDialog {
     private final Locale locale;
     private TreeView<NodeData> treeView;
     private TreeItem<NodeData> rootItem;
+    private Stage dialogStage;
+    private TextField customerNameField;
+    private TextArea customerAddressArea;
+    private TextField propertiesPathField;
+    private TextField templatePathField;
+    private TextField timesheetNameField;
+    private Button propertiesBrowseButton;
+    private Button templateBrowseButton;
+    private Customer detailsCustomer;
+    private boolean updatingDetails;
 
     public ManagementDialog(
         ObservableList<Customer> customers,
@@ -91,17 +107,23 @@ public class ManagementDialog {
         treePanel.setPadding(new Insets(12));
         VBox.setVgrow(treeView, Priority.ALWAYS);
 
+        VBox detailsPanel = createDetailsPanel();
+        HBox content = new HBox(12, treePanel, detailsPanel);
+        HBox.setHgrow(treePanel, Priority.ALWAYS);
+        HBox.setHgrow(detailsPanel, Priority.ALWAYS);
+        detailsPanel.setPrefWidth(420);
+
         BorderPane root = new BorderPane();
         root.setTop(new VBox(menuBar, toolBar));
-        root.setCenter(treePanel);
-        BorderPane.setMargin(treePanel, new Insets(10));
+        root.setCenter(content);
+        BorderPane.setMargin(content, new Insets(10));
 
-        Stage dialog = new Stage();
-        dialog.initOwner(owner);
-        dialog.initModality(Modality.APPLICATION_MODAL);
-        dialog.setTitle(i18n("management.title"));
-        dialog.setScene(new Scene(root, 520, 480));
-        dialog.showAndWait();
+        dialogStage = new Stage();
+        dialogStage.initOwner(owner);
+        dialogStage.initModality(Modality.APPLICATION_MODAL);
+        dialogStage.setTitle(i18n("management.title"));
+        dialogStage.setScene(new Scene(root, 980, 620));
+        dialogStage.showAndWait();
     }
 
     ContextMenu emptyMenu() {
@@ -176,8 +198,240 @@ public class ManagementDialog {
         treeView = new TreeView<>(rootItem);
         treeView.setShowRoot(false);
         treeView.setCellFactory(listView -> new ProjectTreeCell(this));
+        treeView.getSelectionModel().selectedItemProperty().addListener((obs, oldValue, newValue) -> {
+            NodeData data = newValue != null ? newValue.getValue() : null;
+            updateDetailsForSelection(data);
+        });
 
         rebuildTree();
+    }
+
+    private VBox createDetailsPanel() {
+        customerNameField = new TextField();
+        customerAddressArea = new TextArea();
+        customerAddressArea.setPrefRowCount(3);
+        customerAddressArea.setWrapText(true);
+        propertiesPathField = new TextField();
+        templatePathField = new TextField();
+        timesheetNameField = new TextField();
+        propertiesBrowseButton = new Button(i18n("management.file.browse"));
+        templateBrowseButton = new Button(i18n("management.file.browse"));
+        propertiesBrowseButton.setOnAction(event -> chooseCustomerFile(propertiesPathField, "*.properties"));
+        templateBrowseButton.setOnAction(event -> chooseCustomerFile(templatePathField, "*.xls", "*.xlsx"));
+
+        GridPane grid = new GridPane();
+        grid.setHgap(8);
+        grid.setVgap(8);
+        ColumnConstraints labelColumn = new ColumnConstraints();
+        labelColumn.setMinWidth(140);
+        labelColumn.setPrefWidth(170);
+        ColumnConstraints fieldColumn = new ColumnConstraints();
+        fieldColumn.setHgrow(Priority.ALWAYS);
+        grid.getColumnConstraints().addAll(labelColumn, fieldColumn);
+        grid.add(new Label(i18n("management.customer.field.name")), 0, 0);
+        grid.add(customerNameField, 1, 0);
+        grid.add(new Label(i18n("management.customer.field.address")), 0, 1);
+        grid.add(customerAddressArea, 1, 1);
+        grid.add(new Label(i18n("management.customer.field.properties")), 0, 2);
+        grid.add(fieldWithBrowse(propertiesPathField, propertiesBrowseButton), 1, 2);
+        grid.add(new Label(i18n("management.customer.field.template")), 0, 3);
+        grid.add(fieldWithBrowse(templatePathField, templateBrowseButton), 1, 3);
+        grid.add(new Label(i18n("management.customer.field.timesheetName")), 0, 4);
+        grid.add(timesheetNameField, 1, 4);
+        GridPane.setHgrow(customerNameField, Priority.ALWAYS);
+        GridPane.setHgrow(customerAddressArea, Priority.ALWAYS);
+        GridPane.setHgrow(propertiesPathField, Priority.ALWAYS);
+        GridPane.setHgrow(templatePathField, Priority.ALWAYS);
+        GridPane.setHgrow(timesheetNameField, Priority.ALWAYS);
+
+        configureDetailsHandlers();
+        setDetailsDisabled(true);
+
+        VBox panel = new VBox(10, sectionHeader(i18n("management.details.title")), grid);
+        panel.setPadding(new Insets(12));
+        return panel;
+    }
+
+    private HBox fieldWithBrowse(TextField field, Button browseButton) {
+        HBox box = new HBox(6, field, browseButton);
+        HBox.setHgrow(field, Priority.ALWAYS);
+        return box;
+    }
+
+    private void configureDetailsHandlers() {
+        customerNameField.setOnAction(event -> commitCustomerName());
+        customerNameField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused) {
+                commitCustomerName();
+            }
+        });
+        customerAddressArea.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused) {
+                commitCustomerAddress();
+            }
+        });
+        propertiesPathField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused) {
+                commitCustomerPropertiesPath();
+            }
+        });
+        templatePathField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused) {
+                commitCustomerTemplatePath();
+            }
+        });
+        timesheetNameField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused) {
+                commitTimesheetNameSuggestion();
+            }
+        });
+    }
+
+    private void updateDetailsForSelection(NodeData data) {
+        Customer customer = null;
+        if (data != null) {
+            customer = data.customer;
+        }
+        detailsCustomer = customer;
+        updatingDetails = true;
+        if (customer == null) {
+            customerNameField.setText("");
+            customerAddressArea.setText("");
+            propertiesPathField.setText("");
+            templatePathField.setText("");
+            timesheetNameField.setText("");
+            setDetailsDisabled(true);
+        } else {
+            customerNameField.setText(safeText(customer.getName()));
+            customerAddressArea.setText(safeText(customer.getAddress()));
+            propertiesPathField.setText(safeText(customer.getTimesheetPropertiesPath()));
+            templatePathField.setText(safeText(customer.getTimesheetTemplatePath()));
+            timesheetNameField.setText(safeText(customer.getTimesheetFilenameSuggestion()));
+            setDetailsDisabled(false);
+        }
+        updatingDetails = false;
+    }
+
+    private String safeText(String value) {
+        return value == null ? "" : value;
+    }
+
+    private void setDetailsDisabled(boolean disabled) {
+        customerNameField.setDisable(disabled);
+        customerAddressArea.setDisable(disabled);
+        propertiesPathField.setDisable(disabled);
+        templatePathField.setDisable(disabled);
+        timesheetNameField.setDisable(disabled);
+        propertiesBrowseButton.setDisable(disabled);
+        templateBrowseButton.setDisable(disabled);
+    }
+
+    private void commitCustomerName() {
+        if (updatingDetails || detailsCustomer == null) {
+            return;
+        }
+        String value = customerNameField.getText() != null ? customerNameField.getText().trim() : "";
+        if (value.isEmpty()) {
+            customerNameField.setText(detailsCustomer.getName());
+            return;
+        }
+        if (!value.equals(detailsCustomer.getName())) {
+            detailsCustomer.setName(value);
+            sortCustomers();
+            rebuildTree();
+            selectCustomer(detailsCustomer);
+            onSave.run();
+        }
+    }
+
+    private void commitCustomerAddress() {
+        if (updatingDetails || detailsCustomer == null) {
+            return;
+        }
+        String value = customerAddressArea.getText();
+        if (value == null) {
+            value = "";
+        }
+        if (!value.equals(detailsCustomer.getAddress())) {
+            detailsCustomer.setAddress(value);
+            onSave.run();
+        }
+    }
+
+    private void commitCustomerPropertiesPath() {
+        if (updatingDetails || detailsCustomer == null) {
+            return;
+        }
+        String value = normalizePath(propertiesPathField.getText());
+        if (!value.equals(safeText(detailsCustomer.getTimesheetPropertiesPath()))) {
+            detailsCustomer.setTimesheetPropertiesPath(value);
+            onSave.run();
+        }
+    }
+
+    private void commitCustomerTemplatePath() {
+        if (updatingDetails || detailsCustomer == null) {
+            return;
+        }
+        String value = normalizePath(templatePathField.getText());
+        if (!value.equals(safeText(detailsCustomer.getTimesheetTemplatePath()))) {
+            detailsCustomer.setTimesheetTemplatePath(value);
+            onSave.run();
+        }
+    }
+
+    private void commitTimesheetNameSuggestion() {
+        if (updatingDetails || detailsCustomer == null) {
+            return;
+        }
+        String value = normalizePath(timesheetNameField.getText());
+        if (!value.equals(safeText(detailsCustomer.getTimesheetFilenameSuggestion()))) {
+            detailsCustomer.setTimesheetFilenameSuggestion(value);
+            onSave.run();
+        }
+    }
+
+    private String normalizePath(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim();
+    }
+
+    private void chooseCustomerFile(TextField targetField, String... extensions) {
+        if (dialogStage == null) {
+            return;
+        }
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle(i18n("management.file.title"));
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
+            i18n("management.file.filter"),
+            extensions
+        ));
+        applyInitialFile(chooser, targetField.getText());
+        java.io.File file = chooser.showOpenDialog(dialogStage);
+        if (file != null) {
+            targetField.setText(file.getAbsolutePath());
+            if (targetField == propertiesPathField) {
+                commitCustomerPropertiesPath();
+            } else if (targetField == templatePathField) {
+                commitCustomerTemplatePath();
+            }
+        }
+    }
+
+    private void applyInitialFile(FileChooser chooser, String path) {
+        if (path == null || path.isBlank()) {
+            return;
+        }
+        java.io.File file = new java.io.File(path);
+        java.io.File directory = file.isDirectory() ? file : file.getParentFile();
+        if (directory != null && directory.exists()) {
+            chooser.setInitialDirectory(directory);
+        }
+        if (file.isFile()) {
+            chooser.setInitialFileName(file.getName());
+        }
     }
 
     private void rebuildTree() {
