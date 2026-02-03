@@ -91,7 +91,7 @@ import treimers.net.whathaveyoudone.view.SettingsDialogView;
 import treimers.net.whathaveyoudone.view.MainView;
 
 public class MainController {
-    private static final Path DATA_PATH = Paths.get("whathaveyoudone.json");
+    private static final Path DATA_PATH = Paths.get(System.getProperty("user.home"), "whathaveyoudone.json");
     private static final DateTimeFormatter CSV_DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yy HH:mm");
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final Color TOOLBAR_ICON_COLOR = Color.web("#2563eb");
