@@ -28,6 +28,7 @@ import java.util.ResourceBundle;
 import java.util.UUID;
 import java.util.prefs.Preferences;
 import javafx.animation.PauseTransition;
+import javafx.application.Platform;
 import static javafx.util.Duration.millis;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
@@ -873,8 +874,10 @@ public class MainController {
         }
         reminderDelay = new PauseTransition(millis(delay.toMillis()));
         reminderDelay.setOnFinished(event -> {
-            showHourlyPrompt();
-            scheduleNextReminder();
+            Platform.runLater(() -> {
+                showHourlyPrompt();
+                scheduleNextReminder();
+            });
         });
         reminderDelay.play();
     }
