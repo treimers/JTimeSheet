@@ -24,6 +24,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.MissingResourceException;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.ResourceBundle;
 import java.util.UUID;
 import java.util.prefs.Preferences;
@@ -1048,8 +1049,7 @@ public class MainController {
             showInfo(i18n("timesheet.customer.required"));
             return;
         }
-        Path propertiesPath = resolveCustomerFile(selectedCustomer.getTimesheetPropertiesPath());
-        if (propertiesPath == null) {
+        if (!hasRequiredTimesheetConfig(selectedCustomer)) {
             showInfo(i18n("timesheet.customer.missing.properties", selectedCustomer.getName()));
             return;
         }
@@ -1067,9 +1067,10 @@ public class MainController {
             : new ArrayList<>(activities);
         exportActivities.removeIf(activity -> !selectedCustomer.getId().equals(activity.getCustomerId()));
         TimesheetWriter writer = new TimesheetWriter();
+        Properties properties = buildTimesheetProperties(selectedCustomer);
         try {
             writer.writeTimesheet(
-                propertiesPath,
+                properties,
                 templatePath,
                 outputFile.toPath(),
                 exportActivities,
@@ -1081,6 +1082,51 @@ public class MainController {
             showInfo(i18n("timesheet.write.error", exception.getMessage()));
         }
     }
+
+    private Properties buildTimesheetProperties(Customer customer) {
+        Properties properties = new Properties();
+        putIfNotBlank(properties, "rounding", customer.getTimesheetRounding());
+        putIfNotBlank(properties, "target.sheetno", customer.getTimesheetSheetNo());
+        putIfNotBlank(properties, "target.month.row", customer.getTimesheetMonthRow());
+        putIfNotBlank(properties, "target.month.column", customer.getTimesheetMonthColumn());
+        putIfNotBlank(properties, "target.data.row", customer.getTimesheetDataRow());
+        putIfNotBlank(properties, "target.date.column", customer.getTimesheetDateColumn());
+        putIfNotBlank(properties, "target.start.column", customer.getTimesheetStartColumn());
+        putIfNotBlank(properties, "target.end.column", customer.getTimesheetEndColumn());
+        putIfNotBlank(properties, "target.pause.column", customer.getTimesheetPauseColumn());
+        putIfNotBlank(properties, "target.task.column", customer.getTimesheetTaskColumn());
+        putIfNotBlank(properties, "target.date.format", customer.getTimesheetDateFormat());
+        putIfNotBlank(properties, "target.evaluate.formulas", customer.getTimesheetEvaluateFormulas());
+        putIfNotBlank(properties, "target.task.separator", customer.getTimesheetTaskSeparator());
+        return properties;
+    }
+
+    private boolean hasRequiredTimesheetConfig(Customer customer) {
+        return hasText(customer.getTimesheetSheetNo())
+            && hasText(customer.getTimesheetMonthRow())
+            && hasText(customer.getTimesheetMonthColumn())
+            && hasText(customer.getTimesheetDataRow())
+            && hasText(customer.getTimesheetDateColumn())
+            && hasText(customer.getTimesheetStartColumn())
+            && hasText(customer.getTimesheetEndColumn())
+            && hasText(customer.getTimesheetPauseColumn())
+            && hasText(customer.getTimesheetTaskColumn());
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private void putIfNotBlank(Properties properties, String key, String value) {
+        if (value == null) {
+            return;
+        }
+        String trimmed = value.trim();
+        if (!trimmed.isEmpty()) {
+            properties.setProperty(key, trimmed);
+        }
+    }
+
 
     private File chooseTimesheetOutputFile(Customer customer, Path templatePath) {
         FileChooser chooser = new FileChooser();
@@ -1715,9 +1761,21 @@ public class MainController {
                         customerId,
                         customerData.name,
                         customerData.address,
-                        customerData.timesheetPropertiesPath,
                         customerData.timesheetTemplatePath,
-                        customerData.timesheetFilenameSuggestion
+                        customerData.timesheetFilenameSuggestion,
+                        customerData.timesheetRounding,
+                        customerData.timesheetSheetNo,
+                        customerData.timesheetMonthRow,
+                        customerData.timesheetMonthColumn,
+                        customerData.timesheetDataRow,
+                        customerData.timesheetDateColumn,
+                        customerData.timesheetStartColumn,
+                        customerData.timesheetEndColumn,
+                        customerData.timesheetPauseColumn,
+                        customerData.timesheetTaskColumn,
+                        customerData.timesheetDateFormat,
+                        customerData.timesheetEvaluateFormulas,
+                        customerData.timesheetTaskSeparator
                     );
                     if (customerData.projects != null) {
                         for (ProjectData projectData : customerData.projects) {
@@ -1770,9 +1828,21 @@ public class MainController {
             customerData.id = customer.getId();
             customerData.name = customer.getName();
             customerData.address = customer.getAddress();
-            customerData.timesheetPropertiesPath = customer.getTimesheetPropertiesPath();
             customerData.timesheetTemplatePath = customer.getTimesheetTemplatePath();
             customerData.timesheetFilenameSuggestion = customer.getTimesheetFilenameSuggestion();
+            customerData.timesheetRounding = customer.getTimesheetRounding();
+            customerData.timesheetSheetNo = customer.getTimesheetSheetNo();
+            customerData.timesheetMonthRow = customer.getTimesheetMonthRow();
+            customerData.timesheetMonthColumn = customer.getTimesheetMonthColumn();
+            customerData.timesheetDataRow = customer.getTimesheetDataRow();
+            customerData.timesheetDateColumn = customer.getTimesheetDateColumn();
+            customerData.timesheetStartColumn = customer.getTimesheetStartColumn();
+            customerData.timesheetEndColumn = customer.getTimesheetEndColumn();
+            customerData.timesheetPauseColumn = customer.getTimesheetPauseColumn();
+            customerData.timesheetTaskColumn = customer.getTimesheetTaskColumn();
+            customerData.timesheetDateFormat = customer.getTimesheetDateFormat();
+            customerData.timesheetEvaluateFormulas = customer.getTimesheetEvaluateFormulas();
+            customerData.timesheetTaskSeparator = customer.getTimesheetTaskSeparator();
             customerData.projects = new ArrayList<>();
             for (Project project : customer.getProjects()) {
                 ProjectData projectData = new ProjectData();

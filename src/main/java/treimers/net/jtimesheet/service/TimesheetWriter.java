@@ -3,7 +3,6 @@ package treimers.net.jtimesheet.service;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -36,7 +35,7 @@ public class TimesheetWriter {
     private static final DateTimeFormatter DEFAULT_DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
     public void writeTimesheet(
-        Path propertiesPath,
+        Properties properties,
         Path templatePath,
         Path outputPath,
         List<Activity> activities,
@@ -44,7 +43,10 @@ public class TimesheetWriter {
         Function<String, String> projectResolver,
         Function<String, String> taskResolver
     ) throws IOException {
-        Config config = Config.load(propertiesPath);
+        if (properties == null) {
+            throw new IllegalArgumentException("Missing timesheet properties.");
+        }
+        Config config = new Config(properties);
         List<ActivityRecord> records = toRecords(activities, customerResolver, projectResolver, taskResolver);
         if (records.isEmpty()) {
             throw new IllegalArgumentException("No activities to export.");
@@ -290,14 +292,6 @@ public class TimesheetWriter {
             dateFormat = getString(properties, "target.date.format");
             evaluateFormulas = getBoolean(properties, "target.evaluate.formulas", true);
             taskSeparator = getString(properties, "target.task.separator", ", ");
-        }
-
-        private static Config load(Path path) throws IOException {
-            Properties properties = new Properties();
-            try (Reader reader = Files.newBufferedReader(path)) {
-                properties.load(reader);
-            }
-            return new Config(properties);
         }
 
         private static int getRequiredInt(Properties properties, String key) {

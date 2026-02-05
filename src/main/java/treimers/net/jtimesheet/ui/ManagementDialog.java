@@ -5,6 +5,8 @@ import java.util.Locale;
 import java.util.MissingResourceException;
 import java.util.Optional;
 import java.util.ResourceBundle;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
 
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -16,6 +18,7 @@ import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar.ButtonData;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
@@ -59,10 +62,21 @@ public class ManagementDialog {
     private Stage dialogStage;
     private TextField customerNameField;
     private TextArea customerAddressArea;
-    private TextField propertiesPathField;
     private TextField templatePathField;
     private TextField timesheetNameField;
-    private Button propertiesBrowseButton;
+    private TextField timesheetRoundingField;
+    private TextField timesheetSheetNoField;
+    private TextField timesheetMonthRowField;
+    private TextField timesheetMonthColumnField;
+    private TextField timesheetDataRowField;
+    private TextField timesheetDateColumnField;
+    private TextField timesheetStartColumnField;
+    private TextField timesheetEndColumnField;
+    private TextField timesheetPauseColumnField;
+    private TextField timesheetTaskColumnField;
+    private TextField timesheetDateFormatField;
+    private TextField timesheetTaskSeparatorField;
+    private CheckBox timesheetEvaluateFormulasCheck;
     private Button templateBrowseButton;
     private Customer detailsCustomer;
     private boolean updatingDetails;
@@ -214,12 +228,22 @@ public class ManagementDialog {
         customerAddressArea = new TextArea();
         customerAddressArea.setPrefRowCount(3);
         customerAddressArea.setWrapText(true);
-        propertiesPathField = new TextField();
         templatePathField = new TextField();
         timesheetNameField = new TextField();
-        propertiesBrowseButton = new Button(i18n("management.file.browse"));
+        timesheetRoundingField = new TextField();
+        timesheetSheetNoField = new TextField();
+        timesheetMonthRowField = new TextField();
+        timesheetMonthColumnField = new TextField();
+        timesheetDataRowField = new TextField();
+        timesheetDateColumnField = new TextField();
+        timesheetStartColumnField = new TextField();
+        timesheetEndColumnField = new TextField();
+        timesheetPauseColumnField = new TextField();
+        timesheetTaskColumnField = new TextField();
+        timesheetDateFormatField = new TextField();
+        timesheetTaskSeparatorField = new TextField();
+        timesheetEvaluateFormulasCheck = new CheckBox();
         templateBrowseButton = new Button(i18n("management.file.browse"));
-        propertiesBrowseButton.setOnAction(event -> chooseCustomerFile(propertiesPathField, "*.properties"));
         templateBrowseButton.setOnAction(event -> chooseCustomerFile(templatePathField, "*.xls", "*.xlsx"));
 
         GridPane grid = new GridPane();
@@ -235,17 +259,55 @@ public class ManagementDialog {
         grid.add(customerNameField, 1, 0);
         grid.add(new Label(i18n("management.customer.field.address")), 0, 1);
         grid.add(customerAddressArea, 1, 1);
-        grid.add(new Label(i18n("management.customer.field.properties")), 0, 2);
-        grid.add(fieldWithBrowse(propertiesPathField, propertiesBrowseButton), 1, 2);
-        grid.add(new Label(i18n("management.customer.field.template")), 0, 3);
-        grid.add(fieldWithBrowse(templatePathField, templateBrowseButton), 1, 3);
-        grid.add(new Label(i18n("management.customer.field.timesheetName")), 0, 4);
-        grid.add(timesheetNameField, 1, 4);
+        grid.add(new Label(i18n("management.customer.field.template")), 0, 2);
+        grid.add(fieldWithBrowse(templatePathField, templateBrowseButton), 1, 2);
+        grid.add(new Label(i18n("management.customer.field.timesheetName")), 0, 3);
+        grid.add(timesheetNameField, 1, 3);
+        Label timesheetSectionLabel = new Label(i18n("management.customer.section.timesheet"));
+        timesheetSectionLabel.setStyle("-fx-font-weight: bold;");
+        grid.add(timesheetSectionLabel, 0, 4, 2, 1);
+        grid.add(new Label(i18n("management.customer.field.rounding")), 0, 5);
+        grid.add(timesheetRoundingField, 1, 5);
+        grid.add(new Label(i18n("management.customer.field.sheetNo")), 0, 6);
+        grid.add(timesheetSheetNoField, 1, 6);
+        grid.add(new Label(i18n("management.customer.field.monthRow")), 0, 7);
+        grid.add(timesheetMonthRowField, 1, 7);
+        grid.add(new Label(i18n("management.customer.field.monthColumn")), 0, 8);
+        grid.add(timesheetMonthColumnField, 1, 8);
+        grid.add(new Label(i18n("management.customer.field.dataRow")), 0, 9);
+        grid.add(timesheetDataRowField, 1, 9);
+        grid.add(new Label(i18n("management.customer.field.dateColumn")), 0, 10);
+        grid.add(timesheetDateColumnField, 1, 10);
+        grid.add(new Label(i18n("management.customer.field.startColumn")), 0, 11);
+        grid.add(timesheetStartColumnField, 1, 11);
+        grid.add(new Label(i18n("management.customer.field.endColumn")), 0, 12);
+        grid.add(timesheetEndColumnField, 1, 12);
+        grid.add(new Label(i18n("management.customer.field.pauseColumn")), 0, 13);
+        grid.add(timesheetPauseColumnField, 1, 13);
+        grid.add(new Label(i18n("management.customer.field.taskColumn")), 0, 14);
+        grid.add(timesheetTaskColumnField, 1, 14);
+        grid.add(new Label(i18n("management.customer.field.dateFormat")), 0, 15);
+        grid.add(timesheetDateFormatField, 1, 15);
+        grid.add(new Label(i18n("management.customer.field.evaluateFormulas")), 0, 16);
+        grid.add(timesheetEvaluateFormulasCheck, 1, 16);
+        grid.add(new Label(i18n("management.customer.field.taskSeparator")), 0, 17);
+        grid.add(timesheetTaskSeparatorField, 1, 17);
         GridPane.setHgrow(customerNameField, Priority.ALWAYS);
         GridPane.setHgrow(customerAddressArea, Priority.ALWAYS);
-        GridPane.setHgrow(propertiesPathField, Priority.ALWAYS);
         GridPane.setHgrow(templatePathField, Priority.ALWAYS);
         GridPane.setHgrow(timesheetNameField, Priority.ALWAYS);
+        GridPane.setHgrow(timesheetRoundingField, Priority.ALWAYS);
+        GridPane.setHgrow(timesheetSheetNoField, Priority.ALWAYS);
+        GridPane.setHgrow(timesheetMonthRowField, Priority.ALWAYS);
+        GridPane.setHgrow(timesheetMonthColumnField, Priority.ALWAYS);
+        GridPane.setHgrow(timesheetDataRowField, Priority.ALWAYS);
+        GridPane.setHgrow(timesheetDateColumnField, Priority.ALWAYS);
+        GridPane.setHgrow(timesheetStartColumnField, Priority.ALWAYS);
+        GridPane.setHgrow(timesheetEndColumnField, Priority.ALWAYS);
+        GridPane.setHgrow(timesheetPauseColumnField, Priority.ALWAYS);
+        GridPane.setHgrow(timesheetTaskColumnField, Priority.ALWAYS);
+        GridPane.setHgrow(timesheetDateFormatField, Priority.ALWAYS);
+        GridPane.setHgrow(timesheetTaskSeparatorField, Priority.ALWAYS);
 
         configureDetailsHandlers();
         setDetailsDisabled(true);
@@ -273,11 +335,6 @@ public class ManagementDialog {
                 commitCustomerAddress();
             }
         });
-        propertiesPathField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (!isFocused) {
-                commitCustomerPropertiesPath();
-            }
-        });
         templatePathField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
             if (!isFocused) {
                 commitCustomerTemplatePath();
@@ -287,6 +344,69 @@ public class ManagementDialog {
             if (!isFocused) {
                 commitTimesheetNameSuggestion();
             }
+        });
+        timesheetRoundingField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused) {
+                commitTimesheetRounding();
+            }
+        });
+        timesheetSheetNoField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused) {
+                commitTimesheetSheetNo();
+            }
+        });
+        timesheetMonthRowField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused) {
+                commitTimesheetMonthRow();
+            }
+        });
+        timesheetMonthColumnField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused) {
+                commitTimesheetMonthColumn();
+            }
+        });
+        timesheetDataRowField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused) {
+                commitTimesheetDataRow();
+            }
+        });
+        timesheetDateColumnField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused) {
+                commitTimesheetDateColumn();
+            }
+        });
+        timesheetStartColumnField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused) {
+                commitTimesheetStartColumn();
+            }
+        });
+        timesheetEndColumnField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused) {
+                commitTimesheetEndColumn();
+            }
+        });
+        timesheetPauseColumnField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused) {
+                commitTimesheetPauseColumn();
+            }
+        });
+        timesheetTaskColumnField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused) {
+                commitTimesheetTaskColumn();
+            }
+        });
+        timesheetDateFormatField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused) {
+                commitTimesheetDateFormat();
+            }
+        });
+        timesheetTaskSeparatorField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused) {
+                commitTimesheetTaskSeparator();
+            }
+        });
+        timesheetEvaluateFormulasCheck.selectedProperty().addListener((obs, wasSelected, isSelected) -> {
+            commitTimesheetEvaluateFormulas();
         });
     }
 
@@ -300,16 +420,40 @@ public class ManagementDialog {
         if (customer == null) {
             customerNameField.setText("");
             customerAddressArea.setText("");
-            propertiesPathField.setText("");
             templatePathField.setText("");
             timesheetNameField.setText("");
+            timesheetRoundingField.setText("");
+            timesheetSheetNoField.setText("");
+            timesheetMonthRowField.setText("");
+            timesheetMonthColumnField.setText("");
+            timesheetDataRowField.setText("");
+            timesheetDateColumnField.setText("");
+            timesheetStartColumnField.setText("");
+            timesheetEndColumnField.setText("");
+            timesheetPauseColumnField.setText("");
+            timesheetTaskColumnField.setText("");
+            timesheetDateFormatField.setText("");
+            timesheetTaskSeparatorField.setText("");
+            timesheetEvaluateFormulasCheck.setSelected(false);
             setDetailsDisabled(true);
         } else {
             customerNameField.setText(safeText(customer.getName()));
             customerAddressArea.setText(safeText(customer.getAddress()));
-            propertiesPathField.setText(safeText(customer.getTimesheetPropertiesPath()));
             templatePathField.setText(safeText(customer.getTimesheetTemplatePath()));
             timesheetNameField.setText(safeText(customer.getTimesheetFilenameSuggestion()));
+            timesheetRoundingField.setText(safeText(customer.getTimesheetRounding()));
+            timesheetSheetNoField.setText(safeText(customer.getTimesheetSheetNo()));
+            timesheetMonthRowField.setText(safeText(customer.getTimesheetMonthRow()));
+            timesheetMonthColumnField.setText(safeText(customer.getTimesheetMonthColumn()));
+            timesheetDataRowField.setText(safeText(customer.getTimesheetDataRow()));
+            timesheetDateColumnField.setText(safeText(customer.getTimesheetDateColumn()));
+            timesheetStartColumnField.setText(safeText(customer.getTimesheetStartColumn()));
+            timesheetEndColumnField.setText(safeText(customer.getTimesheetEndColumn()));
+            timesheetPauseColumnField.setText(safeText(customer.getTimesheetPauseColumn()));
+            timesheetTaskColumnField.setText(safeText(customer.getTimesheetTaskColumn()));
+            timesheetDateFormatField.setText(safeText(customer.getTimesheetDateFormat()));
+            timesheetTaskSeparatorField.setText(safeText(customer.getTimesheetTaskSeparator()));
+            timesheetEvaluateFormulasCheck.setSelected(isTrueOrDefault(customer.getTimesheetEvaluateFormulas(), true));
             setDetailsDisabled(false);
         }
         updatingDetails = false;
@@ -319,13 +463,31 @@ public class ManagementDialog {
         return value == null ? "" : value;
     }
 
+    private boolean isTrueOrDefault(String value, boolean fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return Boolean.parseBoolean(value.trim());
+    }
+
     private void setDetailsDisabled(boolean disabled) {
         customerNameField.setDisable(disabled);
         customerAddressArea.setDisable(disabled);
-        propertiesPathField.setDisable(disabled);
         templatePathField.setDisable(disabled);
         timesheetNameField.setDisable(disabled);
-        propertiesBrowseButton.setDisable(disabled);
+        timesheetRoundingField.setDisable(disabled);
+        timesheetSheetNoField.setDisable(disabled);
+        timesheetMonthRowField.setDisable(disabled);
+        timesheetMonthColumnField.setDisable(disabled);
+        timesheetDataRowField.setDisable(disabled);
+        timesheetDateColumnField.setDisable(disabled);
+        timesheetStartColumnField.setDisable(disabled);
+        timesheetEndColumnField.setDisable(disabled);
+        timesheetPauseColumnField.setDisable(disabled);
+        timesheetTaskColumnField.setDisable(disabled);
+        timesheetDateFormatField.setDisable(disabled);
+        timesheetTaskSeparatorField.setDisable(disabled);
+        timesheetEvaluateFormulasCheck.setDisable(disabled);
         templateBrowseButton.setDisable(disabled);
     }
 
@@ -361,17 +523,6 @@ public class ManagementDialog {
         }
     }
 
-    private void commitCustomerPropertiesPath() {
-        if (updatingDetails || detailsCustomer == null) {
-            return;
-        }
-        String value = normalizePath(propertiesPathField.getText());
-        if (!value.equals(safeText(detailsCustomer.getTimesheetPropertiesPath()))) {
-            detailsCustomer.setTimesheetPropertiesPath(value);
-            onSave.run();
-        }
-    }
-
     private void commitCustomerTemplatePath() {
         if (updatingDetails || detailsCustomer == null) {
             return;
@@ -394,12 +545,98 @@ public class ManagementDialog {
         }
     }
 
+    private void commitTimesheetRounding() {
+        commitTimesheetField(timesheetRoundingField, Customer::getTimesheetRounding, Customer::setTimesheetRounding);
+    }
+
+    private void commitTimesheetSheetNo() {
+        commitTimesheetField(timesheetSheetNoField, Customer::getTimesheetSheetNo, Customer::setTimesheetSheetNo);
+    }
+
+    private void commitTimesheetMonthRow() {
+        commitTimesheetField(timesheetMonthRowField, Customer::getTimesheetMonthRow, Customer::setTimesheetMonthRow);
+    }
+
+    private void commitTimesheetMonthColumn() {
+        commitTimesheetField(timesheetMonthColumnField, Customer::getTimesheetMonthColumn, Customer::setTimesheetMonthColumn);
+    }
+
+    private void commitTimesheetDataRow() {
+        commitTimesheetField(timesheetDataRowField, Customer::getTimesheetDataRow, Customer::setTimesheetDataRow);
+    }
+
+    private void commitTimesheetDateColumn() {
+        commitTimesheetField(timesheetDateColumnField, Customer::getTimesheetDateColumn, Customer::setTimesheetDateColumn);
+    }
+
+    private void commitTimesheetStartColumn() {
+        commitTimesheetField(timesheetStartColumnField, Customer::getTimesheetStartColumn, Customer::setTimesheetStartColumn);
+    }
+
+    private void commitTimesheetEndColumn() {
+        commitTimesheetField(timesheetEndColumnField, Customer::getTimesheetEndColumn, Customer::setTimesheetEndColumn);
+    }
+
+    private void commitTimesheetPauseColumn() {
+        commitTimesheetField(timesheetPauseColumnField, Customer::getTimesheetPauseColumn, Customer::setTimesheetPauseColumn);
+    }
+
+    private void commitTimesheetTaskColumn() {
+        commitTimesheetField(timesheetTaskColumnField, Customer::getTimesheetTaskColumn, Customer::setTimesheetTaskColumn);
+    }
+
+    private void commitTimesheetDateFormat() {
+        commitTimesheetField(timesheetDateFormatField, Customer::getTimesheetDateFormat, Customer::setTimesheetDateFormat);
+    }
+
+    private void commitTimesheetTaskSeparator() {
+        commitTimesheetField(timesheetTaskSeparatorField, Customer::getTimesheetTaskSeparator, Customer::setTimesheetTaskSeparator);
+    }
+
+    private void commitTimesheetEvaluateFormulas() {
+        if (updatingDetails || detailsCustomer == null) {
+            return;
+        }
+        String value = Boolean.toString(timesheetEvaluateFormulasCheck.isSelected());
+        if (!value.equals(safeText(detailsCustomer.getTimesheetEvaluateFormulas()))) {
+            detailsCustomer.setTimesheetEvaluateFormulas(value);
+            onSave.run();
+        }
+    }
+
+    private void commitTimesheetField(
+        TextField field,
+        Function<Customer, String> getter,
+        BiConsumer<Customer, String> setter
+    ) {
+        if (updatingDetails || detailsCustomer == null) {
+            return;
+        }
+        String value = normalizePath(field.getText());
+        if (!value.equals(safeText(getter.apply(detailsCustomer)))) {
+            setter.accept(detailsCustomer, value);
+            onSave.run();
+        }
+    }
+
     private void commitAllDetails() {
         commitCustomerName();
         commitCustomerAddress();
-        commitCustomerPropertiesPath();
         commitCustomerTemplatePath();
         commitTimesheetNameSuggestion();
+        commitTimesheetRounding();
+        commitTimesheetSheetNo();
+        commitTimesheetMonthRow();
+        commitTimesheetMonthColumn();
+        commitTimesheetDataRow();
+        commitTimesheetDateColumn();
+        commitTimesheetStartColumn();
+        commitTimesheetEndColumn();
+        commitTimesheetPauseColumn();
+        commitTimesheetTaskColumn();
+        commitTimesheetDateFormat();
+        commitTimesheetTaskSeparator();
+        commitTimesheetEvaluateFormulas();
     }
 
     private String normalizePath(String value) {
@@ -423,9 +660,7 @@ public class ManagementDialog {
         java.io.File file = chooser.showOpenDialog(dialogStage);
         if (file != null) {
             targetField.setText(file.getAbsolutePath());
-            if (targetField == propertiesPathField) {
-                commitCustomerPropertiesPath();
-            } else if (targetField == templatePathField) {
+            if (targetField == templatePathField) {
                 commitCustomerTemplatePath();
             }
         }
