@@ -2,10 +2,10 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>treimers.net</groupId>
-  <artifactId>whathaveyoudone</artifactId>
+  <artifactId>jtimesheet</artifactId>
   <packaging>jar</packaging>
   <version>1.0</version>
-  <name>whathaveyoudone</name>
+  <name>JTimeSheet</name>
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.source>17</maven.compiler.source>
@@ -57,7 +57,7 @@
         <artifactId>javafx-maven-plugin</artifactId>
         <version>0.0.8</version>
         <configuration>
-          <mainClass>treimers.net.whathaveyoudone.WhatHaveYouDone</mainClass>
+          <mainClass>treimers.net.jtimesheet.JTimeSheet</mainClass>
         </configuration>
       </plugin>
 			<plugin>
@@ -71,7 +71,7 @@
 							<goal>package</goal>
 						</goals>
 						<configuration>
-							<mainClass>treimers.net.whathaveyoudone.WhatHaveYouDone</mainClass>
+							<mainClass>treimers.net.jtimesheet.JTimeSheet</mainClass>
 							<bundleJre>true</bundleJre>
 							<generateInstaller>true</generateInstaller>
 							<administratorRequired>false</administratorRequired>
@@ -83,8 +83,8 @@
 							<customizedJre>false</customizedJre>
 							<extractResources>false</extractResources>
 							<macConfig>
-								<backgroundImage>src/main/deploy/package/mac/whathaveyoudone-background.png</backgroundImage>
-								<volumeIcon>src/main/deploy/package/mac/whathaveyoudone-volume.icns</volumeIcon>
+								<backgroundImage>src/main/deploy/package/mac/JTimeSheet-background.png</backgroundImage>
+								<volumeIcon>src/main/deploy/package/mac/JTimeSheet-volume.icns</volumeIcon>
 								<textSize>12</textSize>
 								<iconX>120</iconX>
 								<iconY>115</iconY>
