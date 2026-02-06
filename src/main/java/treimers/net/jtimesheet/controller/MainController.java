@@ -58,10 +58,12 @@ import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.SelectionMode;
 import javafx.scene.control.Separator;
+import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.ToolBar;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
@@ -131,6 +133,7 @@ public class MainController {
     private MenuItem addActivityMenuItem;
     private MenuItem editActivityMenuItem;
     private MenuItem deleteActivityMenuItem;
+    private MenuItem consolidateActivityMenuItem;
     private MenuItem askNowMenuItem;
     private MenuItem settingsMenuItem;
     private MenuItem contextAddActivityItem;
@@ -155,6 +158,7 @@ public class MainController {
     private Button clearProjectButton;
     private Button clearTasksButton;
     private Button clearDatesButton;
+    private Button consolidateButton;
     private TableColumn<Activity, String> customerColumn;
     private TableColumn<Activity, String> projectColumn;
     private TableColumn<Activity, String> taskColumn;
@@ -238,6 +242,11 @@ public class MainController {
         addActivityMenuItem = menuItemWithIcon(i18n("menu.activity.add"), "add", this::addActivity);
         editActivityMenuItem = menuItemWithIcon(i18n("menu.activity.edit"), "edit", this::editActivity);
         deleteActivityMenuItem = menuItemWithIcon(i18n("menu.activity.delete"), "delete", this::deleteActivity);
+        consolidateActivityMenuItem = menuItemWithIcon(
+            i18n("menu.activity.consolidate"),
+            "manage",
+            this::consolidateFilteredActivities
+        );
         askNowMenuItem = menuItemWithIcon(
             i18n("menu.activity.ask"),
             "reminder",
@@ -245,7 +254,14 @@ public class MainController {
         );
 
         activityMenu = new Menu(i18n("menu.activity"));
-        activityMenu.getItems().addAll(addActivityMenuItem, editActivityMenuItem, deleteActivityMenuItem, askNowMenuItem);
+        activityMenu.getItems().addAll(
+            addActivityMenuItem,
+            editActivityMenuItem,
+            deleteActivityMenuItem,
+            new SeparatorMenuItem(),
+            consolidateActivityMenuItem,
+            askNowMenuItem
+        );
         return activityMenu;
     }
 
@@ -282,9 +298,8 @@ public class MainController {
         Button addButton = toolbarButton(i18n("menu.activity.add"), "add", this::addActivity);
         Button editButton = toolbarButton(i18n("menu.activity.edit"), "edit", this::editActivity);
         Button deleteButton = toolbarButton(i18n("menu.activity.delete"), "delete", this::deleteActivity);
+        consolidateButton = toolbarButton(i18n("menu.activity.consolidate"), "manage", this::consolidateFilteredActivities);
         Button askNowButton = toolbarButton(i18n("menu.activity.ask"), "reminder", this::showHourlyPrompt);
-        Button importButton = toolbarButton(i18n("menu.file.import"), "import", this::importCsv);
-        Button exportButton = toolbarButton(i18n("menu.file.export"), "export", this::exportCsv);
         writeTimesheetButton = toolbarButton(i18n("menu.file.timesheet"), "export", this::writeTimesheet);
         Button settingsButton = toolbarButton(i18n("menu.settings.open"), "manage", this::openSettingsDialog);
 
@@ -297,10 +312,9 @@ public class MainController {
             addButton,
             editButton,
             deleteButton,
+            consolidateButton,
             askNowButton,
             new Separator(),
-            importButton,
-            exportButton,
             writeTimesheetButton,
             new Separator(),
             settingsButton
@@ -515,6 +529,7 @@ public class MainController {
             applyFilters();
             saveFilterPreferences();
         });
+
 
         customerFilter.valueProperty().addListener((obs, oldValue, newValue) -> {
             updateProjectFilter(newValue);
@@ -856,6 +871,182 @@ public class MainController {
         if (activityTable != null) {
             activityTable.refresh();
         }
+    }
+
+    private void consolidateFilteredActivities() {
+        if (filteredActivities == null || filteredActivities.isEmpty()) {
+            showInfo(i18n("filter.consolidate.none"));
+            return;
+        }
+        List<Activity> ordered = new ArrayList<>(filteredActivities);
+        ordered.sort(Comparator
+            .comparing(this::activityFromOrMax)
+            .thenComparing(this::activityToOrMax)
+        );
+        List<ConsolidationGroup> groups = buildConsolidationGroups(ordered);
+        if (groups.isEmpty()) {
+            showInfo(i18n("filter.consolidate.none"));
+            return;
+        }
+        if (!confirmConsolidation(groups)) {
+            return;
+        }
+        List<Activity> toRemove = new ArrayList<>();
+        for (ConsolidationGroup group : groups) {
+            Activity target = group.activities.get(0);
+            mergeActivityRange(target, group.activities);
+            for (int i = 1; i < group.activities.size(); i++) {
+                toRemove.add(group.activities.get(i));
+            }
+        }
+        activities.removeAll(toRemove);
+        setLastActivityFromData();
+        saveData();
+        applyFilters();
+    }
+
+    private List<ConsolidationGroup> buildConsolidationGroups(List<Activity> ordered) {
+        List<ConsolidationGroup> groups = new ArrayList<>();
+        ConsolidationGroup current = null;
+        for (Activity activity : ordered) {
+            if (activity == null) {
+                continue;
+            }
+            if (current == null || !current.matches(activity)) {
+                current = new ConsolidationGroup(activity);
+                groups.add(current);
+            } else {
+                current.activities.add(activity);
+            }
+        }
+        groups.removeIf(group -> group.activities.size() < 2);
+        return groups;
+    }
+
+    private boolean confirmConsolidation(List<ConsolidationGroup> groups) {
+        int mergedCount = 0;
+        for (ConsolidationGroup group : groups) {
+            mergedCount += group.activities.size() - 1;
+        }
+        String header = i18n("filter.consolidate.confirm.header", groups.size(), mergedCount);
+        StringBuilder details = new StringBuilder();
+        for (ConsolidationGroup group : groups) {
+            Activity first = group.activities.get(0);
+            Activity last = group.activities.get(group.activities.size() - 1);
+            String customer = resolveCustomerName(group.customerId);
+            String project = resolveProjectName(group.projectId);
+            String task = resolveTaskName(group.taskId);
+            details.append(customer)
+                .append(" / ")
+                .append(project)
+                .append(" / ")
+                .append(task)
+                .append(": ")
+                .append(safeDate(first.getFrom()))
+                .append(" - ")
+                .append(safeDate(last.getTo()))
+                .append(" (")
+                .append(group.activities.size())
+                .append(")")
+                .append(System.lineSeparator());
+        }
+        Alert alert = new Alert(AlertType.CONFIRMATION);
+        alert.setTitle(i18n("filter.consolidate.confirm.title"));
+        alert.setHeaderText(header);
+        TextArea area = new TextArea(details.toString().trim());
+        area.setEditable(false);
+        area.setWrapText(true);
+        area.setPrefRowCount(Math.min(groups.size() + 1, 12));
+        alert.getDialogPane().setContent(area);
+        Optional<ButtonType> result = alert.showAndWait();
+        return result.isPresent() && result.get().getButtonData() == ButtonData.OK_DONE;
+    }
+
+    private void mergeActivityRange(Activity target, List<Activity> group) {
+        LocalDateTime earliestFrom = null;
+        LocalDateTime latestTo = null;
+        for (Activity activity : group) {
+            LocalDateTime from = Activity.parseStoredDateTime(activity.getFrom());
+            LocalDateTime to = Activity.parseStoredDateTime(activity.getTo());
+            earliestFrom = minDateTime(earliestFrom, from);
+            latestTo = maxDateTime(latestTo, to);
+        }
+        if (earliestFrom != null) {
+            target.setFrom(Activity.formatDateTime(earliestFrom));
+        }
+        if (latestTo != null) {
+            target.setTo(Activity.formatDateTime(latestTo));
+        }
+    }
+
+    private LocalDateTime activityFromOrMax(Activity activity) {
+        LocalDateTime value = Activity.parseStoredDateTime(activity.getFrom());
+        return value != null ? value : LocalDateTime.MAX;
+    }
+
+    private LocalDateTime activityToOrMax(Activity activity) {
+        LocalDateTime value = Activity.parseStoredDateTime(activity.getTo());
+        return value != null ? value : LocalDateTime.MAX;
+    }
+
+    private String safeDate(String value) {
+        return value != null && !value.isBlank() ? value.trim() : "?";
+    }
+
+    private LocalDateTime minDateTime(LocalDateTime left, LocalDateTime right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null) {
+            return left;
+        }
+        return left.isBefore(right) ? left : right;
+    }
+
+    private LocalDateTime maxDateTime(LocalDateTime left, LocalDateTime right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null) {
+            return left;
+        }
+        return left.isAfter(right) ? left : right;
+    }
+
+    private final class ConsolidationGroup {
+        private final String customerId;
+        private final String projectId;
+        private final String taskId;
+        private final List<Activity> activities = new ArrayList<>();
+
+        private ConsolidationGroup(Activity activity) {
+            this.customerId = activity.getCustomerId();
+            this.projectId = activity.getProjectId();
+            this.taskId = activity.getTaskId();
+            this.activities.add(activity);
+        }
+
+        private boolean matches(Activity activity) {
+            if (!customerId.equals(activity.getCustomerId())
+                || !projectId.equals(activity.getProjectId())
+                || !taskId.equals(activity.getTaskId())) {
+                return false;
+            }
+            Activity last = activities.get(activities.size() - 1);
+            return isDirectlyAdjacent(last, activity);
+        }
+    }
+
+    private boolean isDirectlyAdjacent(Activity left, Activity right) {
+        if (left == null || right == null) {
+            return false;
+        }
+        LocalDateTime leftTo = Activity.parseStoredDateTime(left.getTo());
+        LocalDateTime rightFrom = Activity.parseStoredDateTime(right.getFrom());
+        if (leftTo == null || rightFrom == null) {
+            return false;
+        }
+        return leftTo.equals(rightFrom);
     }
 
     private void setLastActivityFromData() {
@@ -1990,6 +2181,9 @@ public class MainController {
         if (deleteActivityMenuItem != null) {
             deleteActivityMenuItem.setText(i18n("menu.activity.delete"));
         }
+        if (consolidateActivityMenuItem != null) {
+            consolidateActivityMenuItem.setText(i18n("menu.activity.consolidate"));
+        }
         if (askNowMenuItem != null) {
             askNowMenuItem.setText(i18n("menu.activity.ask"));
         }
@@ -2064,6 +2258,9 @@ public class MainController {
         }
         if (clearDatesButton != null) {
             clearDatesButton.setText(i18n("filter.clear.dates"));
+        }
+        if (consolidateButton != null) {
+            consolidateButton.setText(i18n("filter.consolidate"));
         }
         if (customerFilter != null) {
             String placeholder = i18n("filter.customer.placeholder");
