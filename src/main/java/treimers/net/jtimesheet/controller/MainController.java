@@ -925,11 +925,11 @@ public class MainController {
     }
 
     private boolean confirmConsolidation(List<ConsolidationGroup> groups) {
-        int mergedCount = 0;
+        int totalActivities = 0;
         for (ConsolidationGroup group : groups) {
-            mergedCount += group.activities.size() - 1;
+            totalActivities += group.activities.size();
         }
-        String header = i18n("filter.consolidate.confirm.header", groups.size(), mergedCount);
+        String header = i18n("filter.consolidate.confirm.header", groups.size(), totalActivities, groups.size());
         StringBuilder details = new StringBuilder();
         for (ConsolidationGroup group : groups) {
             Activity first = group.activities.get(0);
