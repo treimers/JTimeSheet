@@ -93,15 +93,12 @@ public class TimesheetWriter {
         LocalDate monthEnd,
         Map<LocalDate, DaySummary> summaries
     ) {
-        DateTimeFormatter dateFormatter = config.dateFormat != null
-            ? DateTimeFormatter.ofPattern(config.dateFormat)
-            : DEFAULT_DATE_FORMAT;
         LocalDate date = monthStart;
         int rowIndex = 0;
         while (!date.isAfter(monthEnd)) {
             Row row = getOrCreateRow(sheet, config.dataRow + rowIndex);
             Cell dateCell = getOrCreateCell(row, config.dateColumn);
-            dateCell.setCellValue(dateFormatter.format(date));
+            dateCell.setCellValue(DEFAULT_DATE_FORMAT.format(date));
             DaySummary summary = summaries.get(date);
             if (summary != null) {
                 writeTimeCell(row, config.startColumn, summary.startTime);
@@ -274,7 +271,6 @@ public class TimesheetWriter {
         private final int pauseColumn;
         private final int taskColumn;
         private final double rounding;
-        private final String dateFormat;
         private final boolean evaluateFormulas;
         private final String taskSeparator;
 
@@ -289,7 +285,6 @@ public class TimesheetWriter {
             pauseColumn = getRequiredInt(properties, "target.pause.column");
             taskColumn = getRequiredInt(properties, "target.task.column");
             rounding = getDouble(properties, "rounding", 0.0);
-            dateFormat = getString(properties, "target.date.format");
             evaluateFormulas = getBoolean(properties, "target.evaluate.formulas", true);
             taskSeparator = getString(properties, "target.task.separator", ", ");
         }
@@ -324,11 +319,6 @@ public class TimesheetWriter {
                 return fallback;
             }
             return Boolean.parseBoolean(value.trim());
-        }
-
-        private static String getString(Properties properties, String key) {
-            String value = properties.getProperty(key);
-            return value != null && !value.trim().isEmpty() ? value.trim() : null;
         }
 
         private static String getString(Properties properties, String key, String fallback) {

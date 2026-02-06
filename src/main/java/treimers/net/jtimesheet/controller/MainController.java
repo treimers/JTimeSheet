@@ -1095,7 +1095,6 @@ public class MainController {
         putIfNotBlank(properties, "target.end.column", customer.getTimesheetEndColumn());
         putIfNotBlank(properties, "target.pause.column", customer.getTimesheetPauseColumn());
         putIfNotBlank(properties, "target.task.column", customer.getTimesheetTaskColumn());
-        putIfNotBlank(properties, "target.date.format", customer.getTimesheetDateFormat());
         putIfNotBlank(properties, "target.evaluate.formulas", customer.getTimesheetEvaluateFormulas());
         putIfNotBlank(properties, "target.task.separator", customer.getTimesheetTaskSeparator());
         return properties;
@@ -1773,7 +1772,6 @@ public class MainController {
                         customerData.timesheetEndColumn,
                         customerData.timesheetPauseColumn,
                         customerData.timesheetTaskColumn,
-                        customerData.timesheetDateFormat,
                         customerData.timesheetEvaluateFormulas,
                         customerData.timesheetTaskSeparator
                     );
@@ -1840,7 +1838,6 @@ public class MainController {
             customerData.timesheetEndColumn = customer.getTimesheetEndColumn();
             customerData.timesheetPauseColumn = customer.getTimesheetPauseColumn();
             customerData.timesheetTaskColumn = customer.getTimesheetTaskColumn();
-            customerData.timesheetDateFormat = customer.getTimesheetDateFormat();
             customerData.timesheetEvaluateFormulas = customer.getTimesheetEvaluateFormulas();
             customerData.timesheetTaskSeparator = customer.getTimesheetTaskSeparator();
             customerData.projects = new ArrayList<>();

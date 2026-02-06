@@ -74,7 +74,6 @@ public class ManagementDialog {
     private TextField timesheetEndColumnField;
     private TextField timesheetPauseColumnField;
     private TextField timesheetTaskColumnField;
-    private TextField timesheetDateFormatField;
     private TextField timesheetTaskSeparatorField;
     private CheckBox timesheetEvaluateFormulasCheck;
     private Button templateBrowseButton;
@@ -240,7 +239,6 @@ public class ManagementDialog {
         timesheetEndColumnField = new TextField();
         timesheetPauseColumnField = new TextField();
         timesheetTaskColumnField = new TextField();
-        timesheetDateFormatField = new TextField();
         timesheetTaskSeparatorField = new TextField();
         timesheetEvaluateFormulasCheck = new CheckBox();
         templateBrowseButton = new Button(i18n("management.file.browse"));
@@ -286,12 +284,10 @@ public class ManagementDialog {
         grid.add(timesheetPauseColumnField, 1, 13);
         grid.add(new Label(i18n("management.customer.field.taskColumn")), 0, 14);
         grid.add(timesheetTaskColumnField, 1, 14);
-        grid.add(new Label(i18n("management.customer.field.dateFormat")), 0, 15);
-        grid.add(timesheetDateFormatField, 1, 15);
-        grid.add(new Label(i18n("management.customer.field.evaluateFormulas")), 0, 16);
-        grid.add(timesheetEvaluateFormulasCheck, 1, 16);
-        grid.add(new Label(i18n("management.customer.field.taskSeparator")), 0, 17);
-        grid.add(timesheetTaskSeparatorField, 1, 17);
+        grid.add(new Label(i18n("management.customer.field.evaluateFormulas")), 0, 15);
+        grid.add(timesheetEvaluateFormulasCheck, 1, 15);
+        grid.add(new Label(i18n("management.customer.field.taskSeparator")), 0, 16);
+        grid.add(timesheetTaskSeparatorField, 1, 16);
         GridPane.setHgrow(customerNameField, Priority.ALWAYS);
         GridPane.setHgrow(customerAddressArea, Priority.ALWAYS);
         GridPane.setHgrow(templatePathField, Priority.ALWAYS);
@@ -306,7 +302,6 @@ public class ManagementDialog {
         GridPane.setHgrow(timesheetEndColumnField, Priority.ALWAYS);
         GridPane.setHgrow(timesheetPauseColumnField, Priority.ALWAYS);
         GridPane.setHgrow(timesheetTaskColumnField, Priority.ALWAYS);
-        GridPane.setHgrow(timesheetDateFormatField, Priority.ALWAYS);
         GridPane.setHgrow(timesheetTaskSeparatorField, Priority.ALWAYS);
 
         configureDetailsHandlers();
@@ -395,11 +390,6 @@ public class ManagementDialog {
                 commitTimesheetTaskColumn();
             }
         });
-        timesheetDateFormatField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (!isFocused) {
-                commitTimesheetDateFormat();
-            }
-        });
         timesheetTaskSeparatorField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
             if (!isFocused) {
                 commitTimesheetTaskSeparator();
@@ -432,7 +422,6 @@ public class ManagementDialog {
             timesheetEndColumnField.setText("");
             timesheetPauseColumnField.setText("");
             timesheetTaskColumnField.setText("");
-            timesheetDateFormatField.setText("");
             timesheetTaskSeparatorField.setText("");
             timesheetEvaluateFormulasCheck.setSelected(false);
             setDetailsDisabled(true);
@@ -451,7 +440,6 @@ public class ManagementDialog {
             timesheetEndColumnField.setText(safeText(customer.getTimesheetEndColumn()));
             timesheetPauseColumnField.setText(safeText(customer.getTimesheetPauseColumn()));
             timesheetTaskColumnField.setText(safeText(customer.getTimesheetTaskColumn()));
-            timesheetDateFormatField.setText(safeText(customer.getTimesheetDateFormat()));
             timesheetTaskSeparatorField.setText(safeText(customer.getTimesheetTaskSeparator()));
             timesheetEvaluateFormulasCheck.setSelected(isTrueOrDefault(customer.getTimesheetEvaluateFormulas(), true));
             setDetailsDisabled(false);
@@ -485,7 +473,6 @@ public class ManagementDialog {
         timesheetEndColumnField.setDisable(disabled);
         timesheetPauseColumnField.setDisable(disabled);
         timesheetTaskColumnField.setDisable(disabled);
-        timesheetDateFormatField.setDisable(disabled);
         timesheetTaskSeparatorField.setDisable(disabled);
         timesheetEvaluateFormulasCheck.setDisable(disabled);
         templateBrowseButton.setDisable(disabled);
@@ -585,10 +572,6 @@ public class ManagementDialog {
         commitTimesheetField(timesheetTaskColumnField, Customer::getTimesheetTaskColumn, Customer::setTimesheetTaskColumn);
     }
 
-    private void commitTimesheetDateFormat() {
-        commitTimesheetField(timesheetDateFormatField, Customer::getTimesheetDateFormat, Customer::setTimesheetDateFormat);
-    }
-
     private void commitTimesheetTaskSeparator() {
         commitTimesheetField(timesheetTaskSeparatorField, Customer::getTimesheetTaskSeparator, Customer::setTimesheetTaskSeparator);
     }
@@ -634,7 +617,6 @@ public class ManagementDialog {
         commitTimesheetEndColumn();
         commitTimesheetPauseColumn();
         commitTimesheetTaskColumn();
-        commitTimesheetDateFormat();
         commitTimesheetTaskSeparator();
         commitTimesheetEvaluateFormulas();
     }

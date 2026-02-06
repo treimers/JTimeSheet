@@ -22,17 +22,16 @@ public class Customer {
     private final StringProperty timesheetEndColumn;
     private final StringProperty timesheetPauseColumn;
     private final StringProperty timesheetTaskColumn;
-    private final StringProperty timesheetDateFormat;
     private final StringProperty timesheetEvaluateFormulas;
     private final StringProperty timesheetTaskSeparator;
     private final ObservableList<Project> projects = FXCollections.observableArrayList();
 
     public Customer(String name) {
-        this(UUID.randomUUID().toString(), name, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "");
+        this(UUID.randomUUID().toString(), name, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ",");
     }
 
     public Customer(String id, String name) {
-        this(id, name, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "");
+        this(id, name, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ",");
     }
 
     public Customer(
@@ -51,7 +50,6 @@ public class Customer {
         String timesheetEndColumn,
         String timesheetPauseColumn,
         String timesheetTaskColumn,
-        String timesheetDateFormat,
         String timesheetEvaluateFormulas,
         String timesheetTaskSeparator
     ) {
@@ -70,7 +68,6 @@ public class Customer {
         this.timesheetEndColumn = new SimpleStringProperty(safeValue(timesheetEndColumn));
         this.timesheetPauseColumn = new SimpleStringProperty(safeValue(timesheetPauseColumn));
         this.timesheetTaskColumn = new SimpleStringProperty(safeValue(timesheetTaskColumn));
-        this.timesheetDateFormat = new SimpleStringProperty(safeValue(timesheetDateFormat));
         this.timesheetEvaluateFormulas = new SimpleStringProperty(safeValue(timesheetEvaluateFormulas));
         this.timesheetTaskSeparator = new SimpleStringProperty(safeValue(timesheetTaskSeparator));
     }
@@ -189,14 +186,6 @@ public class Customer {
 
     public void setTimesheetTaskColumn(String value) {
         timesheetTaskColumn.set(value);
-    }
-
-    public String getTimesheetDateFormat() {
-        return timesheetDateFormat.get();
-    }
-
-    public void setTimesheetDateFormat(String value) {
-        timesheetDateFormat.set(value);
     }
 
     public String getTimesheetEvaluateFormulas() {

@@ -19,7 +19,6 @@ public class CustomerData {
     public String timesheetEndColumn;
     public String timesheetPauseColumn;
     public String timesheetTaskColumn;
-    public String timesheetDateFormat;
     public String timesheetEvaluateFormulas;
     public String timesheetTaskSeparator;
     public List<ProjectData> projects = new ArrayList<>();
