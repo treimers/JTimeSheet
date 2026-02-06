@@ -97,7 +97,7 @@ import treimers.net.jtimesheet.view.MainView;
 import treimers.net.jtimesheet.view.SettingsDialogView;
 
 public class MainController {
-    private static final Path DATA_PATH = Paths.get(System.getProperty("user.home"), "jtimesheet.json");
+    private static final String DATA_FILENAME = "jtimesheet.json";
     private static final DateTimeFormatter CSV_DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yy HH:mm");
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final Color TOOLBAR_ICON_COLOR = Color.web("#2563eb");
@@ -179,6 +179,7 @@ public class MainController {
 
     public void start(Stage stage) {
         this.primaryStage = stage;
+        settingsService.loadIfPresent(settings);
         loadBundle(settings.getLanguage());
         checkBundleCompleteness();
         menuBar = new MenuBar(
@@ -1598,6 +1599,7 @@ public class MainController {
             settings.setReminderIntervalMinutes(values.getReminderIntervalMinutes());
             settings.setReminderWindow(values.getReminderStart(), values.getReminderEnd());
             settings.setLanguage(values.getLanguage());
+            settings.setDataDirectory(values.getDataDirectory());
             settingsService.save(settings);
             saveData();
             applyLanguage();
@@ -1936,11 +1938,12 @@ public class MainController {
     }
 
     private void loadData() {
-        if (!Files.exists(DATA_PATH)) {
+        Path dataPath = resolveDataPath();
+        if (!Files.exists(dataPath)) {
             return;
         }
         try {
-            StorageData data = storageService.load(DATA_PATH);
+            StorageData data = storageService.load(dataPath);
             applySettings(data != null ? data.settings : null);
             customers.clear();
             activities.clear();
@@ -2056,10 +2059,23 @@ public class MainController {
         }
         data.settings = null;
         try {
-            storageService.save(DATA_PATH, data);
+            Path dataPath = resolveDataPath();
+            Path parent = dataPath.getParent();
+            if (parent != null && !Files.exists(parent)) {
+                Files.createDirectories(parent);
+            }
+            storageService.save(dataPath, data);
         } catch (IOException exception) {
             showInfo(i18n("data.save.error", exception.getMessage()));
         }
+    }
+
+    private Path resolveDataPath() {
+        String directory = settings.getDataDirectory();
+        if (directory == null || directory.isBlank()) {
+            directory = AppSettings.DEFAULT_DATA_DIRECTORY;
+        }
+        return Paths.get(directory).resolve(DATA_FILENAME);
     }
 
     private void applySettings(SettingsData data) {

@@ -1,5 +1,6 @@
 package treimers.net.jtimesheet.view;
 
+import java.io.File;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -12,13 +13,18 @@ import java.util.ResourceBundle;
 
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
+import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar.ButtonData;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.stage.DirectoryChooser;
 import javafx.util.StringConverter;
 import treimers.net.jtimesheet.model.AppSettings;
 import treimers.net.jtimesheet.model.Language;
@@ -179,6 +185,26 @@ public class SettingsDialogView {
             }
         });
 
+        TextField dataDirectoryField = new TextField();
+        dataDirectoryField.setText(settings.getDataDirectory());
+        Button browseButton = new Button(i18n("settings.dataFolder.browse"));
+        Button homeButton = new Button(i18n("settings.dataFolder.home"));
+        browseButton.setOnAction(event -> {
+            DirectoryChooser chooser = new DirectoryChooser();
+            chooser.setTitle(i18n("settings.dataFolder.label"));
+            File initialDirectory = new File(dataDirectoryField.getText());
+            if (initialDirectory.exists() && initialDirectory.isDirectory()) {
+                chooser.setInitialDirectory(initialDirectory);
+            }
+            File selected = chooser.showDialog(dialog.getDialogPane().getScene().getWindow());
+            if (selected != null) {
+                dataDirectoryField.setText(selected.getAbsolutePath());
+            }
+        });
+        homeButton.setOnAction(event -> dataDirectoryField.setText(AppSettings.DEFAULT_DATA_DIRECTORY));
+        HBox dataDirectoryBox = new HBox(8, dataDirectoryField, browseButton, homeButton);
+        HBox.setHgrow(dataDirectoryField, Priority.ALWAYS);
+
         GridPane grid = new GridPane();
         grid.setHgap(10);
         grid.setVgap(10);
@@ -193,6 +219,8 @@ public class SettingsDialogView {
         grid.add(reminderEndChoice, 1, 3);
         grid.add(new Label(i18n("settings.language.label")), 0, 4);
         grid.add(languageChoice, 1, 4);
+        grid.add(new Label(i18n("settings.dataFolder.label")), 0, 5);
+        grid.add(dataDirectoryBox, 1, 5);
 
         dialog.getDialogPane().setContent(grid);
         dialog.setResultConverter(button -> button == saveButton ? button : null);
@@ -205,7 +233,8 @@ public class SettingsDialogView {
             reminderIntervalChoice.getValue(),
             reminderStartChoice.getValue(),
             reminderEndChoice.getValue(),
-            languageChoice.getValue()
+            languageChoice.getValue(),
+            dataDirectoryField.getText()
         ));
     }
 
@@ -258,19 +287,22 @@ public class SettingsDialogView {
         private final LocalTime reminderStart;
         private final LocalTime reminderEnd;
         private final Language language;
+        private final String dataDirectory;
 
         public SettingsResult(
             int timeGridMinutes,
             int reminderIntervalMinutes,
             LocalTime reminderStart,
             LocalTime reminderEnd,
-            Language language
+            Language language,
+            String dataDirectory
         ) {
             this.timeGridMinutes = timeGridMinutes;
             this.reminderIntervalMinutes = reminderIntervalMinutes;
             this.reminderStart = reminderStart;
             this.reminderEnd = reminderEnd;
             this.language = language;
+            this.dataDirectory = dataDirectory;
         }
 
         public int getTimeGridMinutes() {
@@ -291,6 +323,10 @@ public class SettingsDialogView {
 
         public Language getLanguage() {
             return language;
+        }
+
+        public String getDataDirectory() {
+            return dataDirectory;
         }
     }
 }

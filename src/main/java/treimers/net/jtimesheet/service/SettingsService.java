@@ -14,6 +14,7 @@ public class SettingsService {
     private static final String PREF_REMINDER_INTERVAL = "settings.reminder.intervalMinutes";
     private static final String PREF_REMINDER_START = "settings.reminder.start";
     private static final String PREF_REMINDER_END = "settings.reminder.end";
+    private static final String PREF_DATA_DIRECTORY = "settings.dataDirectory";
 
     private final Preferences preferences;
 
@@ -27,8 +28,9 @@ public class SettingsService {
         Integer reminderInterval = readIntPreference(PREF_REMINDER_INTERVAL);
         String reminderStartValue = preferences.get(PREF_REMINDER_START, null);
         String reminderEndValue = preferences.get(PREF_REMINDER_END, null);
+        String dataDirectory = preferences.get(PREF_DATA_DIRECTORY, null);
         if (languageCode == null && timeGrid == null && reminderInterval == null
-            && reminderStartValue == null && reminderEndValue == null) {
+            && reminderStartValue == null && reminderEndValue == null && dataDirectory == null) {
             return false;
         }
         settings.setLanguage(Language.fromCode(languageCode));
@@ -37,6 +39,7 @@ public class SettingsService {
         LocalTime start = parseTimeValue(reminderStartValue, LocalTime.of(9, 0));
         LocalTime end = parseTimeValue(reminderEndValue, LocalTime.of(17, 0));
         settings.setReminderWindow(start, end);
+        settings.setDataDirectory(dataDirectory);
         return true;
     }
 
@@ -46,6 +49,7 @@ public class SettingsService {
         preferences.put(PREF_REMINDER_INTERVAL, String.valueOf(settings.getReminderIntervalMinutes()));
         preferences.put(PREF_REMINDER_START, TIME_FORMAT.format(settings.getReminderStartTime()));
         preferences.put(PREF_REMINDER_END, TIME_FORMAT.format(settings.getReminderEndTime()));
+        preferences.put(PREF_DATA_DIRECTORY, settings.getDataDirectory());
     }
 
     private Integer readIntPreference(String key) {

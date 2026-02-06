@@ -5,12 +5,14 @@ import java.time.LocalTime;
 public class AppSettings {
     public static final int DEFAULT_TIME_GRID_MINUTES = 1;
     public static final int DEFAULT_REMINDER_INTERVAL_MINUTES = 60;
+    public static final String DEFAULT_DATA_DIRECTORY = System.getProperty("user.home");
 
     private int timeGridMinutes = DEFAULT_TIME_GRID_MINUTES;
     private Language language = Language.ENGLISH;
     private int reminderIntervalMinutes = DEFAULT_REMINDER_INTERVAL_MINUTES;
     private LocalTime reminderStartTime = LocalTime.of(9, 0);
     private LocalTime reminderEndTime = LocalTime.of(17, 0);
+    private String dataDirectory = DEFAULT_DATA_DIRECTORY;
 
     public int getTimeGridMinutes() {
         return timeGridMinutes;
@@ -52,6 +54,19 @@ public class AppSettings {
         }
         reminderStartTime = start;
         reminderEndTime = end;
+    }
+
+    public String getDataDirectory() {
+        return dataDirectory;
+    }
+
+    public void setDataDirectory(String value) {
+        if (value == null) {
+            dataDirectory = DEFAULT_DATA_DIRECTORY;
+            return;
+        }
+        String normalized = value.trim();
+        dataDirectory = normalized.isEmpty() ? DEFAULT_DATA_DIRECTORY : normalized;
     }
 
     public static int normalizeTimeGridMinutes(Integer value) {
