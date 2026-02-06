@@ -137,7 +137,7 @@ public class ManagementDialog {
         dialogStage.initOwner(owner);
         dialogStage.initModality(Modality.APPLICATION_MODAL);
         dialogStage.setTitle(i18n("management.title"));
-        dialogStage.setScene(new Scene(root, 980, 620));
+        dialogStage.setScene(new Scene(root, 1160, 760));
         dialogStage.setOnHiding(event -> commitAllDetails());
         dialogStage.showAndWait();
     }
