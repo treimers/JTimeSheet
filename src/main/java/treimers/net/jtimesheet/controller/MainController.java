@@ -60,6 +60,8 @@ import javafx.scene.control.SelectionMode;
 import javafx.scene.control.Separator;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TableCell;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
@@ -80,6 +82,8 @@ import treimers.net.jtimesheet.model.Customer;
 import treimers.net.jtimesheet.model.Language;
 import treimers.net.jtimesheet.model.Project;
 import treimers.net.jtimesheet.model.Task;
+import treimers.net.jtimesheet.model.ViewLevel;
+import treimers.net.jtimesheet.model.ViewTabState;
 import treimers.net.jtimesheet.service.SettingsService;
 import treimers.net.jtimesheet.service.StorageService;
 import treimers.net.jtimesheet.service.TimesheetWriter;
@@ -125,8 +129,10 @@ public class MainController {
     private Menu fileMenu;
     private Menu manageMenu;
     private Menu activityMenu;
+    private Menu viewMenu;
     private Menu settingsMenu;
     private MenuItem manageMenuItem;
+    private MenuItem newViewMenuItem;
     private MenuItem importCsvMenuItem;
     private MenuItem exportCsvMenuItem;
     private MenuItem writeTimesheetMenuItem;
@@ -167,6 +173,10 @@ public class MainController {
     private TableColumn<Activity, String> durationColumn;
     private TableColumn<Activity, String> dailyTotalColumn;
 
+    private TabPane viewTabPane;
+    private final List<ViewTabState> viewTabStates = new ArrayList<>();
+    private boolean restoringViewTabs;
+
     public MainController() {
         this(new AppSettings());
     }
@@ -186,6 +196,7 @@ public class MainController {
             fileMenu(),
             manageMenu(),
             activityMenu(),
+            viewMenu(),
             settingsMenu()
         );
 
@@ -196,12 +207,34 @@ public class MainController {
         activitiesHeaderLabel = sectionHeader(i18n("section.activities"));
         HBox activityHeader = new HBox(10, activitiesHeaderLabel, new Region(), totalHoursLabel);
         HBox.setHgrow(activityHeader.getChildren().get(1), Priority.ALWAYS);
-        VBox activityPanel = new VBox(
-            10,
-            activityHeader,
-            createFilterPanel(),
-            activityTable
-        );
+
+        viewTabPane = new TabPane();
+        Tab mainTab = new Tab(i18n("view.main.tab"));
+        mainTab.setClosable(false);
+        mainTab.setContent(createFilterPanel());
+        viewTabPane.getTabs().add(mainTab);
+        viewTabPane.getSelectionModel().selectedIndexProperty().addListener((obs, oldIdx, newIdx) -> {
+            applyFilters();
+            updateWriteTimesheetButtonForTab();
+            saveViewTabsPreferences();
+        });
+        viewTabPane.getTabs().addListener((ListChangeListener<Tab>) c -> {
+            while (c.next()) {
+                if (c.wasRemoved()) {
+                    for (Tab tab : c.getRemoved()) {
+                        Object ud = tab.getUserData();
+                        if (ud instanceof ViewTabState) {
+                            viewTabStates.remove(ud);
+                        }
+                    }
+                    if (!restoringViewTabs) {
+                        saveViewTabsPreferences();
+                    }
+                }
+            }
+        });
+
+        VBox activityPanel = new VBox(10, activityHeader, viewTabPane, activityTable);
         activityPanel.setPadding(new Insets(12));
         VBox.setVgrow(activityTable, Priority.ALWAYS);
 
@@ -215,6 +248,7 @@ public class MainController {
 
         loadData();
         setLastActivityFromData();
+        updateWriteTimesheetButtonForTab();
         startReminderScheduler();
     }
 
@@ -266,11 +300,50 @@ public class MainController {
         return activityMenu;
     }
 
+    private Menu viewMenu() {
+        viewMenu = new Menu(i18n("menu.view"));
+        newViewMenuItem = menuItemWithIcon(i18n("menu.view.new"), "add", this::openNewViewDialog);
+        viewMenu.getItems().add(newViewMenuItem);
+        return viewMenu;
+    }
+
     private Menu settingsMenu() {
         settingsMenuItem = menuItemWithIcon(i18n("menu.settings.open"), "manage", this::openSettingsDialog);
         settingsMenu = new Menu(i18n("menu.settings"));
         settingsMenu.getItems().add(settingsMenuItem);
         return settingsMenu;
+    }
+
+    private Customer getCurrentCustomerForTimesheet() {
+        if (viewTabPane == null) {
+            return customerFilter != null ? customerFilter.getValue() : null;
+        }
+        int idx = viewTabPane.getSelectionModel().getSelectedIndex();
+        if (idx <= 0) {
+            return customerFilter != null ? customerFilter.getValue() : null;
+        }
+        int stateIndex = idx - 1;
+        if (stateIndex < viewTabStates.size()) {
+            return viewTabStates.get(stateIndex).getFixedCustomer();
+        }
+        return null;
+    }
+
+    private void updateWriteTimesheetButtonForTab() {
+        if (writeTimesheetButton == null || writeTimesheetMenuItem == null) {
+            return;
+        }
+        int idx = viewTabPane != null ? viewTabPane.getSelectionModel().getSelectedIndex() : 0;
+        if (idx <= 0) {
+            writeTimesheetMenuItem.disableProperty().bind(customerFilter.valueProperty().isNull());
+            writeTimesheetButton.disableProperty().bind(customerFilter.valueProperty().isNull());
+        } else {
+            writeTimesheetMenuItem.disableProperty().unbind();
+            writeTimesheetButton.disableProperty().unbind();
+            boolean hasCustomer = getCurrentCustomerForTimesheet() != null;
+            writeTimesheetMenuItem.setDisable(!hasCustomer);
+            writeTimesheetButton.setDisable(!hasCustomer);
+        }
     }
 
     private Label sectionHeader(String text) {
@@ -596,6 +669,301 @@ public class MainController {
         return panel;
     }
 
+    private VBox createViewFilterPanel(ViewTabState state) {
+        Label fixedFilterLabel = new Label(viewTabStateDescription(state));
+        fixedFilterLabel.setStyle("-fx-font-weight: bold;");
+
+        ListView<Task> viewTaskFilter = new ListView<>();
+        viewTaskFilter.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        viewTaskFilter.setFixedCellSize(24);
+        viewTaskFilter.setPrefHeight(viewTaskFilter.getFixedCellSize() * 6 + 6);
+        viewTaskFilter.setPrefWidth(180);
+        ObservableList<Task> tasksForView = tasksForViewState(state);
+        viewTaskFilter.setItems(tasksForView);
+        viewTaskFilter.setCellFactory(lv -> new ListCell<>() {
+            @Override
+            protected void updateItem(Task item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : item.getName());
+            }
+        });
+        for (String id : state.getSelectedTaskIds()) {
+            for (Task t : tasksForView) {
+                if (t.getId().equals(id)) {
+                    viewTaskFilter.getSelectionModel().select(t);
+                    break;
+                }
+            }
+        }
+        viewTaskFilter.getSelectionModel().getSelectedItems().addListener((ListChangeListener<Task>) c -> {
+            List<String> ids = new ArrayList<>();
+            for (Task t : viewTaskFilter.getSelectionModel().getSelectedItems()) {
+                ids.add(t.getId());
+            }
+            state.setSelectedTaskIds(ids);
+            applyFilters();
+            saveViewTabsPreferences();
+        });
+
+        DatePicker viewFrom = new DatePicker(state.getFromDate());
+        DatePicker viewTo = new DatePicker(state.getToDate());
+        ComboBox<PresetRange> viewPreset = new ComboBox<>();
+        viewPreset.getItems().setAll(PresetRange.values());
+        viewPreset.setValue(PresetRange.fromPreference(state.getPresetKey()));
+        viewPreset.setPrefWidth(140);
+        viewPreset.setButtonCell(createPresetCell());
+        viewPreset.setCellFactory(listView -> createPresetCell());
+
+        Button viewClearTasks = new Button(i18n("filter.clear.tasks"));
+        viewClearTasks.setOnAction(e -> {
+            viewTaskFilter.getSelectionModel().clearSelection();
+            state.setSelectedTaskIds(new ArrayList<>());
+            applyFilters();
+            saveViewTabsPreferences();
+        });
+        Button viewClearDates = new Button(i18n("filter.clear.dates"));
+        viewClearDates.setOnAction(e -> {
+            viewFrom.setValue(null);
+            viewTo.setValue(null);
+            viewPreset.getSelectionModel().select(PresetRange.CUSTOM);
+            state.setFromDate(null);
+            state.setToDate(null);
+            state.setPresetKey(PresetRange.CUSTOM.name());
+            applyFilters();
+            saveViewTabsPreferences();
+        });
+
+        viewFrom.valueProperty().addListener((obs, o, n) -> {
+            state.setFromDate(n);
+            viewPreset.getSelectionModel().select(PresetRange.CUSTOM);
+            state.setPresetKey(PresetRange.CUSTOM.name());
+            applyFilters();
+            saveViewTabsPreferences();
+        });
+        viewTo.valueProperty().addListener((obs, o, n) -> {
+            state.setToDate(n);
+            viewPreset.getSelectionModel().select(PresetRange.CUSTOM);
+            state.setPresetKey(PresetRange.CUSTOM.name());
+            applyFilters();
+            saveViewTabsPreferences();
+        });
+        viewPreset.valueProperty().addListener((obs, o, n) -> {
+            if (n == null) return;
+            state.setPresetKey(n.name());
+            LocalDate today = LocalDate.now();
+            switch (n) {
+                case TODAY -> { viewFrom.setValue(today); viewTo.setValue(today); state.setFromDate(today); state.setToDate(today); }
+                case YESTERDAY -> {
+                    LocalDate y = today.minusDays(1);
+                    viewFrom.setValue(y); viewTo.setValue(y); state.setFromDate(y); state.setToDate(y);
+                }
+                case THIS_WEEK -> {
+                    LocalDate start = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                    LocalDate end = start.plusDays(6);
+                    viewFrom.setValue(start); viewTo.setValue(end); state.setFromDate(start); state.setToDate(end);
+                }
+                case LAST_WEEK -> {
+                    LocalDate start = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).minusWeeks(1);
+                    LocalDate end = start.plusDays(6);
+                    viewFrom.setValue(start); viewTo.setValue(end); state.setFromDate(start); state.setToDate(end);
+                }
+                case THIS_MONTH -> {
+                    LocalDate start = today.with(TemporalAdjusters.firstDayOfMonth());
+                    LocalDate end = today.with(TemporalAdjusters.lastDayOfMonth());
+                    viewFrom.setValue(start); viewTo.setValue(end); state.setFromDate(start); state.setToDate(end);
+                }
+                case LAST_MONTH -> {
+                    LocalDate start = today.minusMonths(1).with(TemporalAdjusters.firstDayOfMonth());
+                    LocalDate end = today.minusMonths(1).with(TemporalAdjusters.lastDayOfMonth());
+                    viewFrom.setValue(start); viewTo.setValue(end); state.setFromDate(start); state.setToDate(end);
+                }
+                default -> { }
+            }
+            applyFilters();
+            saveViewTabsPreferences();
+        });
+
+        Node tasksRow;
+        if (state.getFixedTask() != null) {
+            tasksRow = new HBox(10, new Label(i18n("filter.tasks.label")), new Label(state.getFixedTask().getName()));
+        } else {
+            tasksRow = new HBox(10, new Label(i18n("filter.tasks.label")), viewTaskFilter, viewClearTasks);
+        }
+        HBox datesRow = new HBox(10,
+            new Label(i18n("filter.from.label")), viewFrom,
+            new Label(i18n("filter.to.label")), viewTo,
+            new Label(i18n("filter.preset.label")), viewPreset,
+            viewClearDates
+        );
+        VBox panel = new VBox(8, fixedFilterLabel, tasksRow, datesRow);
+        panel.setPadding(new Insets(6, 0, 6, 0));
+        return panel;
+    }
+
+    private String viewTabStateDescription(ViewTabState state) {
+        if (state.getFixedCustomer() == null) return "";
+        StringBuilder sb = new StringBuilder();
+        sb.append(i18n("filter.customer.label")).append(" ").append(state.getFixedCustomer().getName());
+        if (state.getFixedProject() != null) {
+            sb.append(" — ").append(i18n("filter.project.label")).append(" ").append(state.getFixedProject().getName());
+            if (state.getFixedTask() != null) {
+                sb.append(" — ").append(i18n("filter.tasks.label")).append(" ").append(state.getFixedTask().getName());
+            }
+        }
+        return sb.toString();
+    }
+
+    private ObservableList<Task> tasksForViewState(ViewTabState state) {
+        ObservableList<Task> out = FXCollections.observableArrayList();
+        if (state.getFixedProject() != null) {
+            out.addAll(state.getFixedProject().getTasks());
+        } else if (state.getFixedCustomer() != null) {
+            for (Project p : state.getFixedCustomer().getProjects()) {
+                out.addAll(p.getTasks());
+            }
+        }
+        return out;
+    }
+
+    private void openNewViewDialog() {
+        if (customers.isEmpty()) {
+            showInfo(i18n("view.new.no.customers"));
+            return;
+        }
+        ComboBox<ViewLevel> levelCombo = new ComboBox<>();
+        levelCombo.getItems().setAll(ViewLevel.values());
+        levelCombo.setValue(ViewLevel.CUSTOMER);
+        levelCombo.setPrefWidth(220);
+        levelCombo.setButtonCell(viewLevelCell());
+        levelCombo.setCellFactory(lv -> viewLevelCell());
+
+        ComboBox<Customer> customerCombo = new ComboBox<>(FXCollections.observableArrayList(customers));
+        customerCombo.setPromptText(i18n("filter.customer.placeholder"));
+        customerCombo.setPrefWidth(220);
+        customerCombo.setButtonCell(createCustomerFilterCell(i18n("filter.customer.placeholder")));
+        customerCombo.setCellFactory(lv -> createCustomerFilterCell(i18n("filter.customer.placeholder")));
+
+        ComboBox<Project> projectCombo = new ComboBox<>();
+        projectCombo.setPrefWidth(220);
+        projectCombo.setButtonCell(createProjectFilterCell(i18n("filter.project.placeholder")));
+        projectCombo.setCellFactory(lv -> createProjectFilterCell(i18n("filter.project.placeholder")));
+
+        ComboBox<Task> taskCombo = new ComboBox<>();
+        taskCombo.setPrefWidth(220);
+        taskCombo.setCellFactory(lv -> new ListCell<>() {
+            @Override
+            protected void updateItem(Task item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? i18n("filter.tasks.label") : item.getName());
+            }
+        });
+
+        levelCombo.valueProperty().addListener((obs, o, level) -> {
+            Customer c = customerCombo.getValue();
+            if (level == ViewLevel.CUSTOMER) {
+                projectCombo.setItems(FXCollections.observableArrayList());
+                projectCombo.setValue(null);
+                taskCombo.setItems(FXCollections.observableArrayList());
+                taskCombo.setValue(null);
+            } else if (level == ViewLevel.CUSTOMER_PROJECT) {
+                if (c != null) {
+                    projectCombo.setItems(FXCollections.observableArrayList(c.getProjects()));
+                    projectCombo.setValue(null);
+                } else {
+                    projectCombo.setItems(FXCollections.observableArrayList());
+                }
+                taskCombo.setItems(FXCollections.observableArrayList());
+                taskCombo.setValue(null);
+            } else {
+                Project p = projectCombo.getValue();
+                if (p != null) {
+                    taskCombo.setItems(FXCollections.observableArrayList(p.getTasks()));
+                    taskCombo.setValue(null);
+                } else {
+                    taskCombo.setItems(FXCollections.observableArrayList());
+                }
+            }
+        });
+        customerCombo.valueProperty().addListener((obs, o, c) -> {
+            ViewLevel level = levelCombo.getValue();
+            if (c == null) {
+                projectCombo.setItems(FXCollections.observableArrayList());
+                taskCombo.setItems(FXCollections.observableArrayList());
+            } else if (level == ViewLevel.CUSTOMER_PROJECT || level == ViewLevel.CUSTOMER_PROJECT_TASK) {
+                projectCombo.setItems(FXCollections.observableArrayList(c.getProjects()));
+                projectCombo.setValue(null);
+                taskCombo.setItems(FXCollections.observableArrayList());
+            }
+        });
+        projectCombo.valueProperty().addListener((obs, o, p) -> {
+            if (levelCombo.getValue() == ViewLevel.CUSTOMER_PROJECT_TASK && p != null) {
+                taskCombo.setItems(FXCollections.observableArrayList(p.getTasks()));
+                taskCombo.setValue(null);
+            }
+        });
+
+        VBox form = new VBox(10,
+            new Label(i18n("view.new.level")), levelCombo,
+            new Label(i18n("filter.customer.label")), customerCombo,
+            new Label(i18n("filter.project.label")), projectCombo,
+            new Label(i18n("view.new.task")), taskCombo
+        );
+        form.setPadding(new Insets(20));
+
+        Alert dialog = new Alert(AlertType.NONE);
+        dialog.setTitle(i18n("view.new.title"));
+        dialog.setHeaderText(i18n("view.new.header"));
+        dialog.getDialogPane().setContent(form);
+        ButtonType ok = new ButtonType(i18n("button.save"), ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(ok, ButtonType.CANCEL);
+
+        Optional<ButtonType> result = dialog.showAndWait();
+        if (result.isEmpty() || result.get() != ok) {
+            return;
+        }
+        Customer selectedCustomer = customerCombo.getValue();
+        if (selectedCustomer == null) {
+            showInfo(i18n("view.new.select.customer"));
+            return;
+        }
+        ViewLevel level = levelCombo.getValue();
+        Project selectedProject = level == ViewLevel.CUSTOMER ? null : projectCombo.getValue();
+        if (level != ViewLevel.CUSTOMER && selectedProject == null) {
+            showInfo(i18n("view.new.select.project"));
+            return;
+        }
+        Task selectedTask = level == ViewLevel.CUSTOMER_PROJECT_TASK ? taskCombo.getValue() : null;
+        if (level == ViewLevel.CUSTOMER_PROJECT_TASK && selectedTask == null) {
+            showInfo(i18n("view.new.select.task"));
+            return;
+        }
+        ViewTabState newState = new ViewTabState(level, selectedCustomer, selectedProject, selectedTask);
+        viewTabStates.add(newState);
+        Tab tab = new Tab(newState.getTabTitle());
+        tab.setUserData(newState);
+        tab.setClosable(true);
+        tab.setContent(createViewFilterPanel(newState));
+        viewTabPane.getTabs().add(tab);
+        viewTabPane.getSelectionModel().select(tab);
+        applyFilters();
+        updateWriteTimesheetButtonForTab();
+        saveViewTabsPreferences();
+    }
+
+    private ListCell<ViewLevel> viewLevelCell() {
+        return new ListCell<>() {
+            @Override
+            protected void updateItem(ViewLevel item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText("");
+                } else {
+                    setText(i18n("view.level." + item.name()));
+                }
+            }
+        };
+    }
+
     private ListCell<Customer> createCustomerFilterCell(String placeholder) {
         return new ListCell<>() {
             @Override
@@ -761,6 +1129,115 @@ public class MainController {
         restoringPreferences = false;
     }
 
+    private void saveViewTabsPreferences() {
+        if (restoringViewTabs || viewTabPane == null) {
+            return;
+        }
+        int count = viewTabStates.size();
+        preferences.putInt("view.count", count);
+        preferences.putInt("view.selectedIndex", viewTabPane.getSelectionModel().getSelectedIndex());
+        for (int i = 0; i < count; i++) {
+            ViewTabState state = viewTabStates.get(i);
+            String prefix = "view." + i + ".";
+            preferences.put(prefix + "level", state.getLevel().name());
+            preferences.put(prefix + "customerId", state.getFixedCustomer() != null ? state.getFixedCustomer().getId() : "");
+            preferences.put(prefix + "projectId", state.getFixedProject() != null ? state.getFixedProject().getId() : "");
+            preferences.put(prefix + "taskId", state.getFixedTask() != null ? state.getFixedTask().getId() : "");
+            preferences.put(prefix + "taskIds", String.join(",", state.getSelectedTaskIds()));
+            preferences.put(prefix + "from", state.getFromDate() != null ? state.getFromDate().toString() : "");
+            preferences.put(prefix + "to", state.getToDate() != null ? state.getToDate().toString() : "");
+            preferences.put(prefix + "preset", state.getPresetKey() != null ? state.getPresetKey() : PresetRange.CUSTOM.name());
+        }
+    }
+
+    private void restoreViewTabsPreferences() {
+        if (viewTabPane == null) {
+            return;
+        }
+        restoringViewTabs = true;
+        int count = preferences.getInt("view.count", 0);
+        for (int i = 0; i < count; i++) {
+            String prefix = "view." + i + ".";
+            String levelStr = preferences.get(prefix + "level", ViewLevel.CUSTOMER.name());
+            String customerId = preferences.get(prefix + "customerId", "");
+            String projectId = preferences.get(prefix + "projectId", "");
+            String taskId = preferences.get(prefix + "taskId", "");
+            String taskIdsStr = preferences.get(prefix + "taskIds", "");
+            String fromStr = preferences.get(prefix + "from", "");
+            String toStr = preferences.get(prefix + "to", "");
+            String presetStr = preferences.get(prefix + "preset", PresetRange.CUSTOM.name());
+
+            ViewLevel level;
+            try {
+                level = ViewLevel.valueOf(levelStr);
+            } catch (Exception e) {
+                level = ViewLevel.CUSTOMER;
+            }
+            Customer customer = findCustomerById(customerId);
+            if (customer == null && !customerId.isBlank()) {
+                customer = findCustomerByName(customerId);
+            }
+            if (customer == null) {
+                continue;
+            }
+            Project project = null;
+            if (level != ViewLevel.CUSTOMER && !projectId.isBlank()) {
+                project = findProjectById(customer, projectId);
+                if (project == null) {
+                    project = findProjectByName(customer, projectId);
+                }
+            }
+            if (level == ViewLevel.CUSTOMER_PROJECT && project == null) {
+                continue;
+            }
+            Task task = null;
+            if (level == ViewLevel.CUSTOMER_PROJECT_TASK && project != null && !taskId.isBlank()) {
+                task = findTaskById(project, taskId);
+                if (task == null) {
+                    task = findTaskByName(project, taskId);
+                }
+            }
+            if (level == ViewLevel.CUSTOMER_PROJECT_TASK && task == null) {
+                continue;
+            }
+
+            ViewTabState state = new ViewTabState(level, customer, project, task);
+            if (!taskIdsStr.isBlank()) {
+                for (String id : taskIdsStr.split(",")) {
+                    String tid = id.trim();
+                    if (!tid.isEmpty()) {
+                        state.getSelectedTaskIds().add(tid);
+                    }
+                }
+            }
+            if (!fromStr.isBlank()) {
+                try {
+                    state.setFromDate(LocalDate.parse(fromStr));
+                } catch (Exception ignored) { }
+            }
+            if (!toStr.isBlank()) {
+                try {
+                    state.setToDate(LocalDate.parse(toStr));
+                } catch (Exception ignored) { }
+            }
+            state.setPresetKey(presetStr);
+
+            viewTabStates.add(state);
+            Tab tab = new Tab(state.getTabTitle());
+            tab.setUserData(state);
+            tab.setClosable(true);
+            tab.setContent(createViewFilterPanel(state));
+            viewTabPane.getTabs().add(tab);
+        }
+        int selectedIndex = preferences.getInt("view.selectedIndex", 0);
+        if (selectedIndex >= 0 && selectedIndex < viewTabPane.getTabs().size()) {
+            viewTabPane.getSelectionModel().select(selectedIndex);
+        }
+        applyFilters();
+        updateWriteTimesheetButtonForTab();
+        restoringViewTabs = false;
+    }
+
     private List<String> getSelectedTaskIds() {
         List<String> ids = new ArrayList<>();
         for (Task task : taskFilter.getSelectionModel().getSelectedItems()) {
@@ -828,41 +1305,67 @@ public class MainController {
         if (filteredActivities == null) {
             return;
         }
-        Customer customer = customerFilter.getValue();
-        Project project = projectFilter.getValue();
-        List<Task> selectedTasks = new ArrayList<>(taskFilter.getSelectionModel().getSelectedItems());
-        LocalDate from = fromFilter.getValue();
-        LocalDate to = toFilter.getValue();
+        Customer customer;
+        Project project;
+        List<String> selectedTaskIds;
+        LocalDate from;
+        LocalDate to;
+
+        int tabIndex = viewTabPane != null ? viewTabPane.getSelectionModel().getSelectedIndex() : 0;
+        if (tabIndex <= 0) {
+            customer = customerFilter.getValue();
+            project = projectFilter.getValue();
+            selectedTaskIds = new ArrayList<>();
+            for (Task t : taskFilter.getSelectionModel().getSelectedItems()) {
+                selectedTaskIds.add(t.getId());
+            }
+            from = fromFilter.getValue();
+            to = toFilter.getValue();
+        } else {
+            int stateIndex = tabIndex - 1;
+            if (stateIndex >= viewTabStates.size()) {
+                return;
+            }
+            ViewTabState state = viewTabStates.get(stateIndex);
+            customer = state.getFixedCustomer();
+            project = state.getFixedProject();
+            if (state.getFixedTask() != null) {
+                selectedTaskIds = List.of(state.getFixedTask().getId());
+            } else {
+                selectedTaskIds = new ArrayList<>(state.getSelectedTaskIds());
+            }
+            from = state.getFromDate();
+            to = state.getToDate();
+        }
+
+        final Customer c = customer;
+        final Project p = project;
+        final List<String> taskIds = selectedTaskIds;
+        final LocalDate fromDate = from;
+        final LocalDate toDate = to;
 
         filteredActivities.setPredicate(activity -> {
-            if (customer != null && !customer.getId().equals(activity.getCustomerId())) {
+            if (c != null && !c.getId().equals(activity.getCustomerId())) {
                 return false;
             }
-            if (project != null && !project.getId().equals(activity.getProjectId())) {
+            if (p != null && !p.getId().equals(activity.getProjectId())) {
                 return false;
             }
-            if (!selectedTasks.isEmpty()) {
-                boolean matchesTask = false;
-                for (Task task : selectedTasks) {
-                    if (task.getId().equals(activity.getTaskId())) {
-                        matchesTask = true;
-                        break;
-                    }
-                }
-                if (!matchesTask) {
+            if (!taskIds.isEmpty()) {
+                if (!taskIds.contains(activity.getTaskId())) {
                     return false;
                 }
             }
-            if (from != null || to != null) {
+            if (fromDate != null || toDate != null) {
                 LocalDateTime activityFrom = Activity.parseStoredDateTime(activity.getFrom());
                 if (activityFrom == null) {
                     return false;
                 }
                 LocalDate activityDate = activityFrom.toLocalDate();
-                if (from != null && activityDate.isBefore(from)) {
+                if (fromDate != null && activityDate.isBefore(fromDate)) {
                     return false;
                 }
-                if (to != null && activityDate.isAfter(to)) {
+                if (toDate != null && activityDate.isAfter(toDate)) {
                     return false;
                 }
             }
@@ -1236,7 +1739,7 @@ public class MainController {
             showInfo(i18n("timesheet.none"));
             return;
         }
-        Customer selectedCustomer = customerFilter.getValue();
+        Customer selectedCustomer = getCurrentCustomerForTimesheet();
         if (selectedCustomer == null) {
             showInfo(i18n("timesheet.customer.required"));
             return;
@@ -2007,6 +2510,7 @@ public class MainController {
             applyFilters();
             refreshFilterChoices();
             restoreFilterPreferences();
+            restoreViewTabsPreferences();
             applyLanguage();
         } catch (IOException exception) {
             showInfo(i18n("data.load.error", exception.getMessage()));
@@ -2172,6 +2676,12 @@ public class MainController {
         }
         if (activityMenu != null) {
             activityMenu.setText(i18n("menu.activity"));
+        }
+        if (viewMenu != null) {
+            viewMenu.setText(i18n("menu.view"));
+        }
+        if (newViewMenuItem != null) {
+            newViewMenuItem.setText(i18n("menu.view.new"));
         }
         if (settingsMenu != null) {
             settingsMenu.setText(i18n("menu.settings"));
