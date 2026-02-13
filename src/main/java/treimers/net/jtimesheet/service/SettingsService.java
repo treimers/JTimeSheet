@@ -15,6 +15,8 @@ public class SettingsService {
     private static final String PREF_REMINDER_START = "settings.reminder.start";
     private static final String PREF_REMINDER_END = "settings.reminder.end";
     private static final String PREF_DATA_DIRECTORY = "settings.dataDirectory";
+    private static final String PREF_MINIMIZE_TO_TRAY = "settings.minimizeToTray";
+    private static final String PREF_REMINDER_TRAY_ONLY = "settings.reminder.trayOnly";
 
     private final Preferences preferences;
 
@@ -29,8 +31,12 @@ public class SettingsService {
         String reminderStartValue = preferences.get(PREF_REMINDER_START, null);
         String reminderEndValue = preferences.get(PREF_REMINDER_END, null);
         String dataDirectory = preferences.get(PREF_DATA_DIRECTORY, null);
+        String minimizeToTrayValue = preferences.get(PREF_MINIMIZE_TO_TRAY, null);
+        String reminderTrayOnlyValue = preferences.get(PREF_REMINDER_TRAY_ONLY, null);
         if (languageCode == null && timeGrid == null && reminderInterval == null
-            && reminderStartValue == null && reminderEndValue == null && dataDirectory == null) {
+            && reminderStartValue == null && reminderEndValue == null
+            && dataDirectory == null && minimizeToTrayValue == null
+            && reminderTrayOnlyValue == null) {
             return false;
         }
         settings.setLanguage(Language.fromCode(languageCode));
@@ -40,6 +46,8 @@ public class SettingsService {
         LocalTime end = parseTimeValue(reminderEndValue, LocalTime.of(17, 0));
         settings.setReminderWindow(start, end);
         settings.setDataDirectory(dataDirectory);
+        settings.setMinimizeToTray(parseBooleanPreference(minimizeToTrayValue));
+        settings.setReminderInTrayOnly(parseBooleanPreference(reminderTrayOnlyValue));
         return true;
     }
 
@@ -50,6 +58,8 @@ public class SettingsService {
         preferences.put(PREF_REMINDER_START, TIME_FORMAT.format(settings.getReminderStartTime()));
         preferences.put(PREF_REMINDER_END, TIME_FORMAT.format(settings.getReminderEndTime()));
         preferences.put(PREF_DATA_DIRECTORY, settings.getDataDirectory());
+        preferences.put(PREF_MINIMIZE_TO_TRAY, String.valueOf(settings.isMinimizeToTray()));
+        preferences.put(PREF_REMINDER_TRAY_ONLY, String.valueOf(settings.isReminderInTrayOnly()));
     }
 
     private Integer readIntPreference(String key) {
@@ -73,5 +83,12 @@ public class SettingsService {
         } catch (Exception exception) {
             return fallback;
         }
+    }
+
+    private Boolean parseBooleanPreference(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return Boolean.parseBoolean(value.trim());
     }
 }

@@ -2,8 +2,21 @@ package treimers.net.jtimesheet.controller;
 
 import static javafx.util.Duration.millis;
 
+import java.awt.AWTException;
+import java.awt.EventQueue;
+import java.awt.Image;
+import java.awt.PopupMenu;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.SystemTray;
+import java.awt.Toolkit;
+import java.awt.TrayIcon;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -74,6 +87,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javax.imageio.ImageIO;
 import treimers.net.jtimesheet.model.Activity;
 import treimers.net.jtimesheet.model.AppSettings;
 import treimers.net.jtimesheet.model.Customer;
@@ -130,6 +144,8 @@ public class MainController {
     private MenuItem importCsvMenuItem;
     private MenuItem exportCsvMenuItem;
     private MenuItem writeTimesheetMenuItem;
+    private MenuItem minimizeToTrayMenuItem;
+    private MenuItem exitMenuItem;
     private MenuItem addActivityMenuItem;
     private MenuItem editActivityMenuItem;
     private MenuItem deleteActivityMenuItem;
@@ -166,6 +182,13 @@ public class MainController {
     private TableColumn<Activity, String> toColumn;
     private TableColumn<Activity, String> durationColumn;
     private TableColumn<Activity, String> dailyTotalColumn;
+    private SystemTray systemTray;
+    private TrayIcon trayIcon;
+    private java.awt.MenuItem trayShowItem;
+    private java.awt.MenuItem trayMinimizeItem;
+    private java.awt.MenuItem trayExitItem;
+    private boolean pendingReminderFromTray;
+    private boolean suppressIconifyHide;
 
     public MainController() {
         this(new AppSettings());
@@ -212,6 +235,8 @@ public class MainController {
         stage.setScene(scene);
         stage.setMaximized(true);
         stage.show();
+        configureTrayState();
+        configureWindowBehavior();
 
         loadData();
         setLastActivityFromData();
@@ -233,9 +258,18 @@ public class MainController {
         importCsvMenuItem = menuItemWithIcon(i18n("menu.file.import"), "import", this::importCsv);
         exportCsvMenuItem = menuItemWithIcon(i18n("menu.file.export"), "export", this::exportCsv);
         writeTimesheetMenuItem = menuItemWithIcon(i18n("menu.file.timesheet"), "export", this::writeTimesheet);
+        minimizeToTrayMenuItem = menuItemWithIcon(i18n("menu.file.minimizeToTray"), "manage", this::hideToTray);
+        exitMenuItem = menuItemWithIcon(i18n("menu.file.exit"), "delete", this::exitFromTray);
 
         fileMenu = new Menu(i18n("menu.file"));
-        fileMenu.getItems().addAll(importCsvMenuItem, exportCsvMenuItem, writeTimesheetMenuItem);
+        fileMenu.getItems().addAll(
+            importCsvMenuItem,
+            exportCsvMenuItem,
+            writeTimesheetMenuItem,
+            new SeparatorMenuItem(),
+            minimizeToTrayMenuItem,
+            exitMenuItem
+        );
         return fileMenu;
     }
 
@@ -1125,6 +1159,19 @@ public class MainController {
     }
 
     private void showHourlyPrompt() {
+        if (notifyReminderInTrayOnly()) {
+            return;
+        }
+        ensureWindowVisibleForDialog();
+        showHourlyPromptDialog();
+    }
+
+    private void showHourlyPromptFromTrayActivation() {
+        ensureWindowVisibleForDialog();
+        showHourlyPromptDialog();
+    }
+
+    private void showHourlyPromptDialog() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime[] range = suggestedPromptRange(now);
         LocalDateTime from = range[0];
@@ -1149,6 +1196,37 @@ public class MainController {
             task
         );
         input.ifPresent(this::addOrMergeActivity);
+    }
+
+    private void ensureWindowVisibleForDialog() {
+        if (primaryStage == null) {
+            return;
+        }
+        if (!primaryStage.isShowing() && settings.isMinimizeToTray()) {
+            primaryStage.show();
+            primaryStage.setIconified(false);
+        }
+        primaryStage.toFront();
+        updateTrayMenuState(primaryStage.isShowing());
+    }
+
+    private boolean notifyReminderInTrayOnly() {
+        if (!settings.isReminderInTrayOnly()) {
+            return false;
+        }
+        if (primaryStage == null || primaryStage.isShowing()) {
+            return false;
+        }
+        if (trayIcon == null) {
+            return false;
+        }
+        pendingReminderFromTray = true;
+        trayIcon.displayMessage(
+            i18n("prompt.hourly.title"),
+            i18n("tray.reminder.message"),
+            TrayIcon.MessageType.INFO
+        );
+        return true;
     }
 
     private LocalDateTime[] suggestedPromptRange(LocalDateTime now) {
@@ -1600,9 +1678,12 @@ public class MainController {
             settings.setReminderWindow(values.getReminderStart(), values.getReminderEnd());
             settings.setLanguage(values.getLanguage());
             settings.setDataDirectory(values.getDataDirectory());
+            settings.setMinimizeToTray(values.isMinimizeToTray());
+            settings.setReminderInTrayOnly(values.isReminderTrayOnly());
             settingsService.save(settings);
             saveData();
             applyLanguage();
+            configureTrayState();
             startReminderScheduler();
         }
     }
@@ -2188,6 +2269,12 @@ public class MainController {
         if (writeTimesheetMenuItem != null) {
             writeTimesheetMenuItem.setText(i18n("menu.file.timesheet"));
         }
+        if (minimizeToTrayMenuItem != null) {
+            minimizeToTrayMenuItem.setText(i18n("menu.file.minimizeToTray"));
+        }
+        if (exitMenuItem != null) {
+            exitMenuItem.setText(i18n("menu.file.exit"));
+        }
         if (addActivityMenuItem != null) {
             addActivityMenuItem.setText(i18n("menu.activity.add"));
         }
@@ -2241,7 +2328,267 @@ public class MainController {
             presetFilter.setButtonCell(createPresetCell());
             presetFilter.setCellFactory(listView -> createPresetCell());
         }
+        updateTrayText();
         applyFilters();
+    }
+
+    private void configureTrayState() {
+        if (!settings.isMinimizeToTray()) {
+            Platform.setImplicitExit(true);
+            removeTrayIcon();
+            return;
+        }
+        Platform.setImplicitExit(false);
+        runOnAwtThread(() -> {
+            Toolkit.getDefaultToolkit();
+            boolean supported = SystemTray.isSupported();
+            Platform.runLater(() -> {
+                if (!supported) {
+                    Platform.setImplicitExit(true);
+                    removeTrayIcon();
+                    return;
+                }
+                initializeTrayIcon();
+            });
+        });
+    }
+
+    private void configureWindowBehavior() {
+        if (primaryStage == null) {
+            return;
+        }
+        primaryStage.setOnCloseRequest(event -> {
+            if (shouldMinimizeToTray()) {
+                event.consume();
+                hideToTray();
+            } else {
+                removeTrayIcon();
+            }
+        });
+        primaryStage.iconifiedProperty().addListener((obs, wasIconified, isIconified) -> {
+            if (isIconified && shouldMinimizeToTray()) {
+                if (suppressIconifyHide) {
+                    Platform.runLater(() -> {
+                        if (primaryStage != null) {
+                            primaryStage.setIconified(false);
+                        }
+                    });
+                    return;
+                }
+                Platform.runLater(this::hideToTray);
+            }
+        });
+        primaryStage.showingProperty().addListener((obs, wasShowing, isShowing) -> {
+            updateTrayMenuState(isShowing);
+        });
+    }
+
+    private boolean shouldMinimizeToTray() {
+        return settings.isMinimizeToTray() && trayIcon != null;
+    }
+
+    private void hideToTray() {
+        if (primaryStage != null) {
+            primaryStage.hide();
+            updateTrayMenuState(false);
+        }
+    }
+
+    private void restoreFromTray() {
+        Platform.runLater(() -> {
+            if (primaryStage == null) {
+                return;
+            }
+            suppressIconifyHide = true;
+            primaryStage.show();
+            primaryStage.setIconified(false);
+            primaryStage.toFront();
+            updateTrayMenuState(true);
+            PauseTransition reset = new PauseTransition(millis(300));
+            reset.setOnFinished(event -> {
+                if (primaryStage != null) {
+                    primaryStage.setIconified(false);
+                }
+                suppressIconifyHide = false;
+            });
+            reset.play();
+        });
+    }
+
+    private void handleTrayActivation() {
+        if (pendingReminderFromTray) {
+            pendingReminderFromTray = false;
+            restoreFromTray();
+            Platform.runLater(this::showHourlyPromptFromTrayActivation);
+            return;
+        }
+        restoreFromTray();
+    }
+
+
+    private void exitFromTray() {
+        Platform.runLater(() -> {
+            removeTrayIcon();
+            Platform.exit();
+        });
+    }
+
+    private void initializeTrayIcon() {
+        String showLabel = i18n("tray.show");
+        String exitLabel = i18n("tray.exit");
+        String tooltip = i18n("app.title");
+        runOnAwtThread(() -> {
+            if (trayIcon != null) {
+                updateTrayText();
+                return;
+            }
+            if (!SystemTray.isSupported()) {
+                Platform.runLater(() -> Platform.setImplicitExit(true));
+                return;
+            }
+            systemTray = SystemTray.getSystemTray();
+            Image image = loadTrayImage();
+            TrayIcon icon = new TrayIcon(image != null ? image : createFallbackTrayImage());
+            icon.setImageAutoSize(true);
+            trayShowItem = new java.awt.MenuItem(showLabel);
+            trayMinimizeItem = new java.awt.MenuItem(i18n("tray.minimize"));
+            trayExitItem = new java.awt.MenuItem(exitLabel);
+            trayShowItem.addActionListener(event -> handleTrayActivation());
+            trayMinimizeItem.addActionListener(event -> Platform.runLater(this::hideToTray));
+            trayExitItem.addActionListener(event -> exitFromTray());
+            PopupMenu menu = new PopupMenu();
+            menu.add(trayShowItem);
+            menu.add(trayMinimizeItem);
+            menu.add(trayExitItem);
+            icon.setPopupMenu(menu);
+            icon.setToolTip(tooltip);
+            icon.addActionListener(event -> handleTrayActivation());
+            icon.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent event) {
+                    if (event.getClickCount() >= 2) {
+                        handleTrayActivation();
+                    }
+                }
+            });
+            try {
+                systemTray.add(icon);
+                trayIcon = icon;
+                updateTrayMenuState(primaryStage != null && primaryStage.isShowing());
+            } catch (AWTException exception) {
+                trayIcon = null;
+                systemTray = null;
+                trayShowItem = null;
+                trayExitItem = null;
+                Platform.runLater(() -> Platform.setImplicitExit(true));
+            }
+        });
+    }
+
+    private void updateTrayText() {
+        String showLabel = i18n("tray.show");
+        String exitLabel = i18n("tray.exit");
+        String minimizeLabel = i18n("tray.minimize");
+        String tooltip = i18n("app.title");
+        runOnAwtThread(() -> {
+            if (trayShowItem != null) {
+                trayShowItem.setLabel(showLabel);
+            }
+            if (trayMinimizeItem != null) {
+                trayMinimizeItem.setLabel(minimizeLabel);
+            }
+            if (trayExitItem != null) {
+                trayExitItem.setLabel(exitLabel);
+            }
+            if (trayIcon != null) {
+                trayIcon.setToolTip(tooltip);
+            }
+        });
+    }
+
+    private void updateTrayMenuState(boolean windowVisible) {
+        runOnAwtThread(() -> {
+            if (trayShowItem != null) {
+                trayShowItem.setEnabled(!windowVisible);
+            }
+            if (trayMinimizeItem != null) {
+                trayMinimizeItem.setEnabled(windowVisible);
+            }
+        });
+    }
+
+    private void removeTrayIcon() {
+        runOnAwtThread(() -> {
+            if (systemTray != null && trayIcon != null) {
+                systemTray.remove(trayIcon);
+            }
+            trayIcon = null;
+            systemTray = null;
+            trayShowItem = null;
+            trayMinimizeItem = null;
+            trayExitItem = null;
+        });
+    }
+
+    private void runOnAwtThread(Runnable action) {
+        if (EventQueue.isDispatchThread()) {
+            action.run();
+        } else {
+            EventQueue.invokeLater(action);
+        }
+    }
+
+    private Image loadTrayImage() {
+        List<String> classpathCandidates = List.of(
+            "/JTimeSheet_64x64.png",
+            "/JTimeSheet_128x128.png",
+            "/JTimeSheet.png"
+        );
+        for (String resource : classpathCandidates) {
+            try (InputStream stream = MainController.class.getResourceAsStream(resource)) {
+                if (stream != null) {
+                    Image image = ImageIO.read(stream);
+                    if (image != null) {
+                        return image;
+                    }
+                }
+            } catch (IOException exception) {
+                // Ignore and fall back to file system.
+            }
+        }
+        List<Path> candidates = List.of(
+            Paths.get("src/main/deploy/icon-build/JTimeSheet_64x64.png"),
+            Paths.get("src/main/deploy/icon-build/JTimeSheet_128x128.png"),
+            Paths.get("src/main/deploy/package/linux/JTimeSheet.png"),
+            Paths.get("src/main/deploy/icon-build/JTimeSheet.png")
+        );
+        for (Path candidate : candidates) {
+            if (!Files.exists(candidate)) {
+                continue;
+            }
+            try {
+                Image image = ImageIO.read(candidate.toFile());
+                if (image != null) {
+                    return image;
+                }
+            } catch (IOException exception) {
+                // Ignore and fall back to other sources.
+            }
+        }
+        return createFallbackTrayImage();
+    }
+
+    private Image createFallbackTrayImage() {
+        int size = 16;
+        BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        graphics.setColor(new java.awt.Color(37, 99, 235));
+        graphics.fillOval(0, 0, size, size);
+        graphics.setColor(java.awt.Color.WHITE);
+        graphics.drawLine(4, size / 2, size - 4, size / 2);
+        graphics.dispose();
+        return image;
     }
 
     private void updateFilterTexts() {

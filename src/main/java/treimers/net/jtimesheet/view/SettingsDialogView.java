@@ -16,6 +16,7 @@ import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar.ButtonData;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
@@ -76,7 +77,7 @@ public class SettingsDialogView {
             }
         });
 
-        ComboBox<Integer> reminderIntervalChoice = new ComboBox<>(FXCollections.observableArrayList(15, 30, 60));
+        ComboBox<Integer> reminderIntervalChoice = new ComboBox<>(FXCollections.observableArrayList(1, 15, 30, 60));
         int currentInterval = settings.getReminderIntervalMinutes();
         if (!reminderIntervalChoice.getItems().contains(currentInterval)) {
             reminderIntervalChoice.getItems().add(currentInterval);
@@ -205,6 +206,12 @@ public class SettingsDialogView {
         HBox dataDirectoryBox = new HBox(8, dataDirectoryField, browseButton, homeButton);
         HBox.setHgrow(dataDirectoryField, Priority.ALWAYS);
 
+        CheckBox minimizeToTrayChoice = new CheckBox();
+        minimizeToTrayChoice.setSelected(settings.isMinimizeToTray());
+
+        CheckBox reminderTrayOnlyChoice = new CheckBox();
+        reminderTrayOnlyChoice.setSelected(settings.isReminderInTrayOnly());
+
         GridPane grid = new GridPane();
         grid.setHgap(10);
         grid.setVgap(10);
@@ -221,6 +228,10 @@ public class SettingsDialogView {
         grid.add(languageChoice, 1, 4);
         grid.add(new Label(i18n("settings.dataFolder.label")), 0, 5);
         grid.add(dataDirectoryBox, 1, 5);
+        grid.add(new Label(i18n("settings.minimizeToTray.label")), 0, 6);
+        grid.add(minimizeToTrayChoice, 1, 6);
+        grid.add(new Label(i18n("settings.reminderTrayOnly.label")), 0, 7);
+        grid.add(reminderTrayOnlyChoice, 1, 7);
 
         dialog.getDialogPane().setContent(grid);
         dialog.setResultConverter(button -> button == saveButton ? button : null);
@@ -234,13 +245,15 @@ public class SettingsDialogView {
             reminderStartChoice.getValue(),
             reminderEndChoice.getValue(),
             languageChoice.getValue(),
-            dataDirectoryField.getText()
+            dataDirectoryField.getText(),
+            minimizeToTrayChoice.isSelected(),
+            reminderTrayOnlyChoice.isSelected()
         ));
     }
 
     private List<LocalTime> createTimeOptions() {
         List<LocalTime> options = new ArrayList<>();
-        int stepMinutes = 15;
+        int stepMinutes = 1;
         int steps = (24 * 60) / stepMinutes;
         for (int i = 0; i < steps; i++) {
             options.add(LocalTime.MIDNIGHT.plusMinutes((long) i * stepMinutes));
@@ -288,6 +301,8 @@ public class SettingsDialogView {
         private final LocalTime reminderEnd;
         private final Language language;
         private final String dataDirectory;
+        private final boolean minimizeToTray;
+        private final boolean reminderTrayOnly;
 
         public SettingsResult(
             int timeGridMinutes,
@@ -295,7 +310,9 @@ public class SettingsDialogView {
             LocalTime reminderStart,
             LocalTime reminderEnd,
             Language language,
-            String dataDirectory
+            String dataDirectory,
+            boolean minimizeToTray,
+            boolean reminderTrayOnly
         ) {
             this.timeGridMinutes = timeGridMinutes;
             this.reminderIntervalMinutes = reminderIntervalMinutes;
@@ -303,6 +320,8 @@ public class SettingsDialogView {
             this.reminderEnd = reminderEnd;
             this.language = language;
             this.dataDirectory = dataDirectory;
+            this.minimizeToTray = minimizeToTray;
+            this.reminderTrayOnly = reminderTrayOnly;
         }
 
         public int getTimeGridMinutes() {
@@ -327,6 +346,14 @@ public class SettingsDialogView {
 
         public String getDataDirectory() {
             return dataDirectory;
+        }
+
+        public boolean isMinimizeToTray() {
+            return minimizeToTray;
+        }
+
+        public boolean isReminderTrayOnly() {
+            return reminderTrayOnly;
         }
     }
 }

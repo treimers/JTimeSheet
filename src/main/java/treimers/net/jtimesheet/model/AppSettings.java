@@ -13,6 +13,8 @@ public class AppSettings {
     private LocalTime reminderStartTime = LocalTime.of(9, 0);
     private LocalTime reminderEndTime = LocalTime.of(17, 0);
     private String dataDirectory = DEFAULT_DATA_DIRECTORY;
+    private boolean minimizeToTray;
+    private boolean reminderInTrayOnly;
 
     public int getTimeGridMinutes() {
         return timeGridMinutes;
@@ -67,6 +69,22 @@ public class AppSettings {
         }
         String normalized = value.trim();
         dataDirectory = normalized.isEmpty() ? DEFAULT_DATA_DIRECTORY : normalized;
+    }
+
+    public boolean isMinimizeToTray() {
+        return minimizeToTray;
+    }
+
+    public void setMinimizeToTray(Boolean value) {
+        minimizeToTray = value != null && value;
+    }
+
+    public boolean isReminderInTrayOnly() {
+        return reminderInTrayOnly;
+    }
+
+    public void setReminderInTrayOnly(Boolean value) {
+        reminderInTrayOnly = value != null && value;
     }
 
     public static int normalizeTimeGridMinutes(Integer value) {

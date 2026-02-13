@@ -42,6 +42,17 @@
   </dependencies>
   <build>
 		<finalName>${project.artifactId}</finalName>
+		<resources>
+			<resource>
+				<directory>src/main/resources</directory>
+			</resource>
+			<resource>
+				<directory>src/main/deploy/icon-build</directory>
+				<includes>
+					<include>**/*.png</include>
+				</includes>
+			</resource>
+		</resources>
 		<extensions>
 			<!-- os maven plugin, generates the property os.detected.name with value 
 				"windows", "osx" or "linux" -->
