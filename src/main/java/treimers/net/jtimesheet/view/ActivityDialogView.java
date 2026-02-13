@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.MissingResourceException;
 import java.util.Optional;
 import java.util.ResourceBundle;
+import java.util.function.Function;
 
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -24,6 +25,7 @@ import javafx.scene.control.DatePicker;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.layout.GridPane;
+import javafx.stage.Window;
 import javafx.scene.layout.HBox;
 import treimers.net.jtimesheet.model.Activity;
 import treimers.net.jtimesheet.model.AppSettings;
@@ -31,6 +33,7 @@ import treimers.net.jtimesheet.model.Customer;
 import treimers.net.jtimesheet.model.Project;
 import treimers.net.jtimesheet.model.Task;
 import treimers.net.jtimesheet.ui.ActivityInput;
+import treimers.net.jtimesheet.ui.DefaultProjectAndTask;
 
 public class ActivityDialogView {
     private final ResourceBundle messages;
@@ -49,9 +52,14 @@ public class ActivityDialogView {
         Customer defaultCustomer,
         Project defaultProject,
         Task defaultTask,
-        int timeGridMinutes
+        int timeGridMinutes,
+        Function<Customer, DefaultProjectAndTask> defaultSelectionForCustomer,
+        Window owner
     ) {
         Dialog<ActivityInput> dialog = new Dialog<>();
+        if (owner != null) {
+            dialog.initOwner(owner);
+        }
         dialog.setTitle(title);
         ButtonType saveButton = new ButtonType(i18n("button.save"), ButtonData.OK_DONE);
         ButtonType cancelButton = new ButtonType(i18n("button.cancel"), ButtonData.CANCEL_CLOSE);
@@ -78,6 +86,23 @@ public class ActivityDialogView {
                 projectChoice.setItems(newValue.getProjects());
                 projectChoice.getSelectionModel().clearSelection();
                 taskChoice.setItems(FXCollections.observableArrayList());
+                if (defaultSelectionForCustomer != null) {
+                    DefaultProjectAndTask pt = defaultSelectionForCustomer.apply(newValue);
+                    if (pt != null && pt.getProject() != null && newValue.getProjects().contains(pt.getProject())) {
+                        projectChoice.getSelectionModel().select(pt.getProject());
+                        if (pt.getTask() != null && pt.getProject().getTasks().contains(pt.getTask())) {
+                            taskChoice.getSelectionModel().select(pt.getTask());
+                        } else if (!pt.getProject().getTasks().isEmpty()) {
+                            taskChoice.getSelectionModel().select(pt.getProject().getTasks().get(0));
+                        }
+                    } else if (!newValue.getProjects().isEmpty()) {
+                        Project firstProject = newValue.getProjects().get(0);
+                        projectChoice.getSelectionModel().select(firstProject);
+                        if (!firstProject.getTasks().isEmpty()) {
+                            taskChoice.getSelectionModel().select(firstProject.getTasks().get(0));
+                        }
+                    }
+                }
             }
         });
 

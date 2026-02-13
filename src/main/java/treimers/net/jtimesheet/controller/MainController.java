@@ -27,6 +27,7 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.ResourceBundle;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.prefs.Preferences;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -95,6 +96,7 @@ import treimers.net.jtimesheet.storage.StorageData;
 import treimers.net.jtimesheet.storage.TaskData;
 import treimers.net.jtimesheet.ui.ActivityCallbacks;
 import treimers.net.jtimesheet.ui.ActivityInput;
+import treimers.net.jtimesheet.ui.DefaultProjectAndTask;
 import treimers.net.jtimesheet.ui.ManagementDialog;
 import treimers.net.jtimesheet.view.ActivityDialogView;
 import treimers.net.jtimesheet.view.MainView;
@@ -140,7 +142,6 @@ public class MainController {
     private MenuItem editActivityMenuItem;
     private MenuItem deleteActivityMenuItem;
     private MenuItem consolidateActivityMenuItem;
-    private MenuItem askNowMenuItem;
     private MenuItem settingsMenuItem;
     private MenuItem contextAddActivityItem;
     private MenuItem contextEditActivityItem;
@@ -282,20 +283,13 @@ public class MainController {
             "manage",
             this::consolidateFilteredActivities
         );
-        askNowMenuItem = menuItemWithIcon(
-            i18n("menu.activity.ask"),
-            "reminder",
-            this::showHourlyPrompt
-        );
-
         activityMenu = new Menu(i18n("menu.activity"));
         activityMenu.getItems().addAll(
             addActivityMenuItem,
             editActivityMenuItem,
             deleteActivityMenuItem,
             new SeparatorMenuItem(),
-            consolidateActivityMenuItem,
-            askNowMenuItem
+            consolidateActivityMenuItem
         );
         return activityMenu;
     }
@@ -373,7 +367,6 @@ public class MainController {
         Button editButton = toolbarButton(i18n("menu.activity.edit"), "edit", this::editActivity);
         Button deleteButton = toolbarButton(i18n("menu.activity.delete"), "delete", this::deleteActivity);
         consolidateButton = toolbarButton(i18n("menu.activity.consolidate"), "manage", this::consolidateFilteredActivities);
-        Button askNowButton = toolbarButton(i18n("menu.activity.ask"), "reminder", this::showHourlyPrompt);
         writeTimesheetButton = toolbarButton(i18n("menu.file.timesheet"), "export", this::writeTimesheet);
         Button settingsButton = toolbarButton(i18n("menu.settings.open"), "manage", this::openSettingsDialog);
 
@@ -387,7 +380,6 @@ public class MainController {
             editButton,
             deleteButton,
             consolidateButton,
-            askNowButton,
             new Separator(),
             writeTimesheetButton,
             new Separator(),
@@ -1576,6 +1568,10 @@ public class MainController {
         scheduleNextReminder();
     }
 
+    /**
+     * Schedules the next reminder popup. The timer fires at the next interval boundary
+     * within the reminder window (Settings: Reminder Start–End). Called on startup and after saving settings.
+     */
     private void scheduleNextReminder() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime next = nextReminderTime(now);
@@ -1583,10 +1579,20 @@ public class MainController {
         if (delay.isNegative()) {
             delay = Duration.ZERO;
         }
-        reminderDelay = new PauseTransition(millis(delay.toMillis()));
+        long delayMs = delay.toMillis();
+        if (delayMs <= 0) {
+            Platform.runLater(() -> {
+                LocalDateTime[] range = suggestedPromptRange(LocalDateTime.now());
+                openAddOrPromptActivityDialog(i18n("activity.add.title"), range[0], range[1]);
+                scheduleNextReminder();
+            });
+            return;
+        }
+        reminderDelay = new PauseTransition(millis(delayMs));
         reminderDelay.setOnFinished(event -> {
             Platform.runLater(() -> {
-                showHourlyPrompt();
+                LocalDateTime[] range = suggestedPromptRange(LocalDateTime.now());
+                openAddOrPromptActivityDialog(i18n("activity.add.title"), range[0], range[1]);
                 scheduleNextReminder();
             });
         });
@@ -1627,29 +1633,21 @@ public class MainController {
         return base;
     }
 
-    private void showHourlyPrompt() {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime[] range = suggestedPromptRange(now);
-        LocalDateTime from = range[0];
-        LocalDateTime to = range[1];
-
-        Customer customer = null;
-        Project project = null;
-        Task task = null;
-        if (lastActivity != null) {
-            customer = findCustomerById(lastActivity.getCustomerId());
-            project = customer != null ? findProjectById(customer, lastActivity.getProjectId()) : null;
-            task = project != null ? findTaskById(project, lastActivity.getTaskId()) : null;
-        }
-
+    /** Opens the add activity dialog with shared defaults (last or first customer/project/task). */
+    private void openAddOrPromptActivityDialog(String title, LocalDateTime defaultFrom, LocalDateTime defaultTo) {
+        Customer defaultCustomer = getDefaultCustomerForNewActivity();
+        DefaultProjectAndTask defaultPt = defaultCustomer != null ? getLastProjectAndTaskForCustomer(defaultCustomer) : null;
+        Project defaultProject = defaultPt != null ? defaultPt.getProject() : null;
+        Task defaultTask = defaultPt != null ? defaultPt.getTask() : null;
         Optional<ActivityInput> input = showActivityDialog(
-            i18n("prompt.hourly.title"),
+            title,
             null,
-            from,
-            to,
-            customer,
-            project,
-            task
+            defaultFrom,
+            defaultTo,
+            defaultCustomer,
+            defaultProject,
+            defaultTask,
+            this::getLastProjectAndTaskForCustomer
         );
         input.ifPresent(this::addOrMergeActivity);
     }
@@ -2111,8 +2109,8 @@ public class MainController {
     }
 
     private void addActivity() {
-        Optional<ActivityInput> input = showActivityDialog(i18n("activity.add.title"), null);
-        input.ifPresent(this::addOrMergeActivity);
+        LocalDateTime[] range = suggestedPromptRange(LocalDateTime.now());
+        openAddOrPromptActivityDialog(i18n("activity.add.title"), range[0], range[1]);
     }
 
     private void addOrMergeActivity(ActivityInput input) {
@@ -2205,7 +2203,7 @@ public class MainController {
     }
 
     private Optional<ActivityInput> showActivityDialog(String title, Activity existing) {
-        return showActivityDialog(title, existing, null, null, null, null, null);
+        return showActivityDialog(title, existing, null, null, null, null, null, null);
     }
 
     private Optional<ActivityInput> showActivityDialog(
@@ -2215,7 +2213,8 @@ public class MainController {
         LocalDateTime defaultTo,
         Customer defaultCustomer,
         Project defaultProject,
-        Task defaultTask
+        Task defaultTask,
+        Function<Customer, DefaultProjectAndTask> defaultSelectionForCustomer
     ) {
         LocalDateTime fromDateTime = defaultFrom;
         LocalDateTime toDateTime = defaultTo;
@@ -2242,7 +2241,9 @@ public class MainController {
             resolvedCustomer,
             resolvedProject,
             resolvedTask,
-            settings.getTimeGridMinutes()
+            settings.getTimeGridMinutes(),
+            defaultSelectionForCustomer,
+            primaryStage
         );
     }
 
@@ -2316,6 +2317,64 @@ public class MainController {
             }
         }
         return null;
+    }
+
+    /** Chronologically last activity for the given customer (by latest "to" time). */
+    private Activity findLastActivityForCustomer(String customerId) {
+        if (customerId == null) {
+            return null;
+        }
+        Activity last = null;
+        LocalDateTime lastTo = null;
+        for (Activity a : activities) {
+            if (!customerId.equals(a.getCustomerId())) {
+                continue;
+            }
+            LocalDateTime to = Activity.parseStoredDateTime(a.getTo());
+            if (to == null) {
+                continue;
+            }
+            if (lastTo == null || to.isAfter(lastTo)) {
+                lastTo = to;
+                last = a;
+            }
+        }
+        return last;
+    }
+
+    /** Default customer for new activity: last activity's customer or first customer. */
+    private Customer getDefaultCustomerForNewActivity() {
+        if (lastActivity != null) {
+            Customer c = findCustomerById(lastActivity.getCustomerId());
+            if (c != null) {
+                return c;
+            }
+        }
+        return customers.isEmpty() ? null : customers.get(0);
+    }
+
+    /** Last project and task used for the given customer, or first project and first task. */
+    private DefaultProjectAndTask getLastProjectAndTaskForCustomer(Customer customer) {
+        if (customer == null) {
+            return null;
+        }
+        Activity last = findLastActivityForCustomer(customer.getId());
+        if (last != null) {
+            Project p = findProjectById(customer, last.getProjectId());
+            if (p != null) {
+                Task t = findTaskById(p, last.getTaskId());
+                if (t != null) {
+                    return new DefaultProjectAndTask(p, t);
+                }
+                return new DefaultProjectAndTask(p, p.getTasks().isEmpty() ? null : p.getTasks().get(0));
+            }
+        }
+        if (customer.getProjects().isEmpty()) {
+            return new DefaultProjectAndTask(null, null);
+        }
+        Project firstProject = customer.getProjects().get(0);
+        Task firstTask = firstProject.getTasks().isEmpty() ? null : firstProject.getTasks().get(0);
+        return new DefaultProjectAndTask(firstProject, firstTask);
     }
 
     private String resolveCustomerName(String id) {
@@ -2709,9 +2768,6 @@ public class MainController {
         }
         if (consolidateActivityMenuItem != null) {
             consolidateActivityMenuItem.setText(i18n("menu.activity.consolidate"));
-        }
-        if (askNowMenuItem != null) {
-            askNowMenuItem.setText(i18n("menu.activity.ask"));
         }
         if (settingsMenuItem != null) {
             settingsMenuItem.setText(i18n("menu.settings.open"));
