@@ -177,6 +177,7 @@ public class ActivityDialogView {
             if (selectedDate == null || totalMinutes == null) {
                 return;
             }
+            totalMinutes = roundMinutesToGrid(totalMinutes, timeGridMinutes);
             LocalDateTime from = buildDateTimeOrNull(selectedDate, fromHourChoice.getValue(), fromMinuteChoice.getValue());
             if (from == null) {
                 return;
@@ -185,15 +186,10 @@ public class ActivityDialogView {
             if (to.toLocalDate().isAfter(selectedDate)) {
                 to = selectedDate.atTime(23, 59);
                 to = alignToGrid(to, timeGridMinutes);
-                updating[0] = true;
-                try {
-                    durationTextField.setText(formatDuration(from, to));
-                } finally {
-                    updating[0] = false;
-                }
             }
             updating[0] = true;
             try {
+                durationTextField.setText(formatDuration(from, to));
                 setTimeSelection(toHourChoice, toMinuteChoice, to.getHour(), to.getMinute(), timeGridMinutes);
             } finally {
                 updating[0] = false;
@@ -350,6 +346,15 @@ public class ActivityDialogView {
         Label colon = new Label(":");
         colon.setStyle("-fx-padding: 0 4 0 4;");
         return new HBox(6, hourChoice, colon, minuteChoice);
+    }
+
+    /** Rounds total minutes to the time grid (e.g. 91 with 15-min grid -> 90). */
+    private long roundMinutesToGrid(long totalMinutes, int timeGridMinutes) {
+        int step = AppSettings.normalizeTimeGridMinutes(timeGridMinutes);
+        if (step <= 1) {
+            return totalMinutes;
+        }
+        return (long) Math.round((double) totalMinutes / step) * step;
     }
 
     /** Parses duration string to total minutes. Accepts "h:mm", "hh:mm" (e.g. "1:30", "0:45") or plain minutes "90". */
