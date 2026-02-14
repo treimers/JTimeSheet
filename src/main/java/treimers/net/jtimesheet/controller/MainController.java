@@ -362,23 +362,17 @@ public class MainController {
     }
 
     private ToolBar createMainToolBar() {
-        Button manageButton = toolbarButton(i18n("menu.manage.open"), "manage", this::openManagementDialog);
         Button addButton = toolbarButton(i18n("menu.activity.add"), "add", this::addActivity);
-        Button editButton = toolbarButton(i18n("menu.activity.edit"), "edit", this::editActivity);
-        Button deleteButton = toolbarButton(i18n("menu.activity.delete"), "delete", this::deleteActivity);
+        Button addViewButton = toolbarButton(i18n("menu.view.new"), "add", this::openNewViewDialog);
+        Button manageButton = toolbarButton(i18n("menu.manage.open"), "manage", this::openManagementDialog);
         consolidateButton = toolbarButton(i18n("menu.activity.consolidate"), "manage", this::consolidateFilteredActivities);
         writeTimesheetButton = toolbarButton(i18n("menu.file.timesheet"), "export", this::writeTimesheet);
         Button settingsButton = toolbarButton(i18n("menu.settings.open"), "manage", this::openSettingsDialog);
 
-        editButton.disableProperty().bind(activityTable.getSelectionModel().selectedItemProperty().isNull());
-        deleteButton.disableProperty().bind(activityTable.getSelectionModel().selectedItemProperty().isNull());
-
         return new ToolBar(
-            manageButton,
-            new Separator(),
             addButton,
-            editButton,
-            deleteButton,
+            addViewButton,
+            manageButton,
             consolidateButton,
             new Separator(),
             writeTimesheetButton,
