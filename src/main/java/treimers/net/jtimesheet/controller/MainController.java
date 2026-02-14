@@ -4,6 +4,7 @@ import static javafx.util.Duration.millis;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -36,7 +37,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
 import javafx.animation.PauseTransition;
+import javafx.application.HostServices;
 import javafx.application.Platform;
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Parent;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.stage.Modality;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
@@ -135,6 +142,8 @@ public class MainController {
     private Menu activityMenu;
     private Menu viewMenu;
     private Menu settingsMenu;
+    private Menu helpMenu;
+    private MenuItem helpMenuItem;
     private MenuItem manageMenuItem;
     private MenuItem newViewMenuItem;
     private MenuItem importCsvMenuItem;
@@ -183,6 +192,8 @@ public class MainController {
     private TabPane viewTabPane;
     private final List<ViewTabState> viewTabStates = new ArrayList<>();
     private boolean restoringViewTabs;
+    private Stage helpDialog;
+    private HostServices hostServices;
 
     public MainController() {
         this(new AppSettings());
@@ -194,8 +205,9 @@ public class MainController {
         this.storageService = new StorageService(objectMapper);
     }
 
-    public void start(Stage stage) {
+    public void start(Stage stage, HostServices hostServices) {
         this.primaryStage = stage;
+        this.hostServices = hostServices;
         settingsService.loadIfPresent(settings);
         loadBundle(settings.getLanguage());
         checkBundleCompleteness();
@@ -204,7 +216,8 @@ public class MainController {
             manageMenu(),
             activityMenu(),
             viewMenu(),
-            settingsMenu()
+            settingsMenu(),
+            helpMenu()
         );
 
         activityTable = createActivityTable();
@@ -312,6 +325,64 @@ public class MainController {
         settingsMenu = new Menu(i18n("menu.settings"));
         settingsMenu.getItems().add(settingsMenuItem);
         return settingsMenu;
+    }
+
+    private Menu helpMenu() {
+        helpMenuItem = menuItemWithIcon(i18n("menu.help"), "manage", this::doHelp);
+        helpMenu = new Menu(i18n("menu.help"));
+        helpMenu.getItems().add(helpMenuItem);
+        return helpMenu;
+    }
+
+    private void doHelp() {
+        if (helpDialog == null) {
+            helpDialog = createHelpDialog();
+        }
+        if (helpDialog != null) {
+            helpDialog.showAndWait();
+        }
+    }
+
+    private Stage createHelpDialog() {
+        try {
+            Stage helpStage = new Stage();
+            helpStage.setTitle(i18n("help.dialog.title"));
+            helpStage.initOwner(primaryStage);
+            helpStage.initModality(Modality.WINDOW_MODAL);
+            helpStage.setResizable(true);
+            URL resource = getClass().getResource("/treimers/net/jtimesheet/helppanel.fxml");
+            if (resource == null) {
+                return null;
+            }
+            FXMLLoader loader = new FXMLLoader(resource);
+            Parent root = loader.load();
+            HelpController controller = loader.getController();
+            controller.setLanguage(settings.getLanguage());
+            controller.setMessages(messages);
+            controller.setHostServices(hostServices);
+            controller.initContent();
+            Scene scene = new Scene(root, 900, 600);
+            helpStage.setScene(scene);
+            scene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                if (event.getCode() == KeyCode.ESCAPE) {
+                    helpStage.close();
+                    event.consume();
+                }
+            });
+            return helpStage;
+        } catch (IOException e) {
+            showAlert(AlertType.ERROR, i18n("help.dialog.title"), e.getMessage());
+            return null;
+        }
+    }
+
+    private void showAlert(AlertType type, String title, String content) {
+        Alert alert = new Alert(type);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(content);
+        alert.initOwner(primaryStage);
+        alert.showAndWait();
     }
 
     private Customer getCurrentCustomerForTimesheet() {
@@ -2732,6 +2803,7 @@ public class MainController {
 
     private void applyLanguage() {
         loadBundle(settings.getLanguage());
+        helpDialog = null;
         if (primaryStage != null) {
             primaryStage.setTitle(i18n("app.title"));
         }
@@ -2797,6 +2869,12 @@ public class MainController {
         }
         if (settingsButton != null) {
             settingsButton.setText(i18n("menu.settings.open"));
+        }
+        if (helpMenu != null) {
+            helpMenu.setText(i18n("menu.help"));
+        }
+        if (helpMenuItem != null) {
+            helpMenuItem.setText(i18n("menu.help"));
         }
         if (contextAddActivityItem != null) {
             contextAddActivityItem.setText(i18n("menu.activity.add"));

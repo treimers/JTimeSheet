@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.SplitPane?>
+<?import javafx.scene.web.WebView?>
+
+<SplitPane fx:id="splitPane" dividerPositions="0.25" maxHeight="-Infinity" maxWidth="-Infinity"
+    minHeight="-Infinity" minWidth="-Infinity" prefHeight="500.0" prefWidth="700.0"
+    xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+    fx:controller="treimers.net.jtimesheet.controller.HelpController">
+   <items>
+      <ListView fx:id="listView" prefHeight="200.0" prefWidth="200.0" />
+      <WebView fx:id="webView" prefHeight="498.0" prefWidth="450.0" />
+   </items>
+</SplitPane>

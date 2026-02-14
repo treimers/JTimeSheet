@@ -24,6 +24,7 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.GridPane;
 import javafx.stage.Window;
 import javafx.scene.layout.HBox;
@@ -69,14 +70,15 @@ public class ActivityDialogView {
         ChoiceBox<Project> projectChoice = new ChoiceBox<>();
         ChoiceBox<Task> taskChoice = new ChoiceBox<>();
 
-        DatePicker fromDatePicker = new DatePicker();
-        DatePicker toDatePicker = new DatePicker();
+        DatePicker datePicker = new DatePicker();
         ComboBox<Integer> fromHourChoice = createHourChoiceBox();
         ComboBox<Integer> fromMinuteChoice = createMinuteChoiceBox(timeGridMinutes);
         ComboBox<Integer> toHourChoice = createHourChoiceBox();
         ComboBox<Integer> toMinuteChoice = createMinuteChoiceBox(timeGridMinutes);
 
-        Label durationValue = new Label("--:--");
+        TextField durationTextField = new TextField();
+        durationTextField.setPrefWidth(80);
+        durationTextField.setPromptText("0:00");
 
         customerChoice.getSelectionModel().selectedItemProperty().addListener((obs, oldValue, newValue) -> {
             if (newValue == null) {
@@ -135,13 +137,13 @@ public class ActivityDialogView {
             }
         }
 
-        fromDatePicker.setValue(fromDateTime.toLocalDate());
+        LocalDate date = fromDateTime.toLocalDate();
+        datePicker.setValue(date);
         fromHourChoice.getSelectionModel().select(Integer.valueOf(fromDateTime.getHour()));
         selectMinute(fromMinuteChoice, fromDateTime.getMinute());
-
-        toDatePicker.setValue(toDateTime.toLocalDate());
         toHourChoice.getSelectionModel().select(Integer.valueOf(toDateTime.getHour()));
         selectMinute(toMinuteChoice, toDateTime.getMinute());
+        durationTextField.setText(formatDuration(fromDateTime, toDateTime));
 
         GridPane grid = new GridPane();
         grid.setHgap(10);
@@ -154,41 +156,87 @@ public class ActivityDialogView {
         grid.add(projectChoice, 1, 1);
         grid.add(new Label(i18n("activity.field.task")), 0, 2);
         grid.add(taskChoice, 1, 2);
-        grid.add(new Label(i18n("activity.field.from")), 0, 3);
-        grid.add(createDateTimeRow(fromDatePicker, fromHourChoice, fromMinuteChoice), 1, 3);
-        grid.add(new Label(i18n("activity.field.to")), 0, 4);
-        grid.add(createDateTimeRow(toDatePicker, toHourChoice, toMinuteChoice), 1, 4);
-        grid.add(new Label(i18n("activity.field.duration")), 0, 5);
-        grid.add(durationValue, 1, 5);
+        grid.add(new Label(i18n("activity.field.date")), 0, 3);
+        grid.add(datePicker, 1, 3);
+        grid.add(new Label(i18n("activity.field.from")), 0, 4);
+        grid.add(createTimeRow(fromHourChoice, fromMinuteChoice), 1, 4);
+        grid.add(new Label(i18n("activity.field.to")), 0, 5);
+        grid.add(createTimeRow(toHourChoice, toMinuteChoice), 1, 5);
+        grid.add(new Label(i18n("activity.field.duration")), 0, 6);
+        grid.add(durationTextField, 1, 6);
 
         dialog.getDialogPane().setContent(grid);
 
-        Runnable updateDuration = () -> {
-            LocalDateTime from = buildDateTimeOrNull(fromDatePicker.getValue(), fromHourChoice.getValue(), fromMinuteChoice.getValue());
-            LocalDateTime to = buildDateTimeOrNull(toDatePicker.getValue(), toHourChoice.getValue(), toMinuteChoice.getValue());
-            if (from == null || to == null) {
-                durationValue.setText("--:--");
+        boolean[] updating = { false };
+        Runnable updateToFromDuration = () -> {
+            if (updating[0]) {
                 return;
             }
-            durationValue.setText(formatDuration(from, to));
+            LocalDate selectedDate = datePicker.getValue();
+            Long totalMinutes = parseDurationMinutes(durationTextField.getText());
+            if (selectedDate == null || totalMinutes == null) {
+                return;
+            }
+            LocalDateTime from = buildDateTimeOrNull(selectedDate, fromHourChoice.getValue(), fromMinuteChoice.getValue());
+            if (from == null) {
+                return;
+            }
+            LocalDateTime to = from.plusMinutes(totalMinutes);
+            if (to.toLocalDate().isAfter(selectedDate)) {
+                to = selectedDate.atTime(23, 59);
+                to = alignToGrid(to, timeGridMinutes);
+                updating[0] = true;
+                try {
+                    durationTextField.setText(formatDuration(from, to));
+                } finally {
+                    updating[0] = false;
+                }
+            }
+            updating[0] = true;
+            try {
+                setTimeSelection(toHourChoice, toMinuteChoice, to.getHour(), to.getMinute(), timeGridMinutes);
+            } finally {
+                updating[0] = false;
+            }
         };
 
-        fromDatePicker.valueProperty().addListener((obs, oldValue, newValue) -> updateDuration.run());
-        toDatePicker.valueProperty().addListener((obs, oldValue, newValue) -> updateDuration.run());
-        fromHourChoice.valueProperty().addListener((obs, oldValue, newValue) -> updateDuration.run());
-        fromMinuteChoice.valueProperty().addListener((obs, oldValue, newValue) -> updateDuration.run());
-        toHourChoice.valueProperty().addListener((obs, oldValue, newValue) -> updateDuration.run());
-        toMinuteChoice.valueProperty().addListener((obs, oldValue, newValue) -> updateDuration.run());
+        Runnable updateDurationFromRange = () -> {
+            if (updating[0]) {
+                return;
+            }
+            LocalDateTime from = buildDateTimeOrNull(datePicker.getValue(), fromHourChoice.getValue(), fromMinuteChoice.getValue());
+            LocalDateTime to = buildDateTimeOrNull(datePicker.getValue(), toHourChoice.getValue(), toMinuteChoice.getValue());
+            if (from != null && to != null) {
+                updating[0] = true;
+                try {
+                    durationTextField.setText(formatDuration(from, to));
+                } finally {
+                    updating[0] = false;
+                }
+            }
+        };
+
+        datePicker.valueProperty().addListener((obs, oldValue, newValue) -> updateDurationFromRange.run());
+        fromHourChoice.valueProperty().addListener((obs, oldValue, newValue) -> updateToFromDuration.run());
+        fromMinuteChoice.valueProperty().addListener((obs, oldValue, newValue) -> updateToFromDuration.run());
+        durationTextField.setOnAction(e -> updateToFromDuration.run());
+        durationTextField.focusedProperty().addListener((obs, wasFocused, nowFocused) -> {
+            if (wasFocused && !nowFocused) {
+                updateToFromDuration.run();
+            }
+        });
+        toHourChoice.valueProperty().addListener((obs, oldValue, newValue) -> updateDurationFromRange.run());
+        toMinuteChoice.valueProperty().addListener((obs, oldValue, newValue) -> updateDurationFromRange.run());
 
         dialog.getDialogPane().lookupButton(saveButton).addEventFilter(ActionEvent.ACTION, event -> {
             ActivityInput input = validateActivityInput(
                 customerChoice.getSelectionModel().getSelectedItem(),
                 projectChoice.getSelectionModel().getSelectedItem(),
                 taskChoice.getSelectionModel().getSelectedItem(),
-                fromDatePicker.getValue(),
+                datePicker.getValue(),
                 fromHourChoice.getSelectionModel().getSelectedItem(),
                 fromMinuteChoice.getSelectionModel().getSelectedItem(),
-                toDatePicker.getValue(),
+                datePicker.getValue(),
                 toHourChoice.getSelectionModel().getSelectedItem(),
                 toMinuteChoice.getSelectionModel().getSelectedItem()
             );
@@ -208,16 +256,15 @@ public class ActivityDialogView {
                 customerChoice.getSelectionModel().getSelectedItem(),
                 projectChoice.getSelectionModel().getSelectedItem(),
                 taskChoice.getSelectionModel().getSelectedItem(),
-                fromDatePicker.getValue(),
+                datePicker.getValue(),
                 fromHourChoice.getSelectionModel().getSelectedItem(),
                 fromMinuteChoice.getSelectionModel().getSelectedItem(),
-                toDatePicker.getValue(),
+                datePicker.getValue(),
                 toHourChoice.getSelectionModel().getSelectedItem(),
                 toMinuteChoice.getSelectionModel().getSelectedItem()
             );
         });
 
-        updateDuration.run();
         return dialog.showAndWait();
     }
 
@@ -297,6 +344,57 @@ public class ActivityDialogView {
         ComboBox<Integer> box = new ComboBox<>(FXCollections.observableArrayList(minutes));
         box.setPrefWidth(70);
         return box;
+    }
+
+    private HBox createTimeRow(ComboBox<Integer> hourChoice, ComboBox<Integer> minuteChoice) {
+        Label colon = new Label(":");
+        colon.setStyle("-fx-padding: 0 4 0 4;");
+        return new HBox(6, hourChoice, colon, minuteChoice);
+    }
+
+    /** Parses duration string to total minutes. Accepts "h:mm", "hh:mm" (e.g. "1:30", "0:45") or plain minutes "90". */
+    private Long parseDurationMinutes(String text) {
+        if (text == null || (text = text.trim()).isEmpty()) {
+            return null;
+        }
+        if (text.startsWith("-")) {
+            return null;
+        }
+        if (text.contains(":")) {
+            String[] parts = text.split(":", 2);
+            if (parts.length != 2) {
+                return null;
+            }
+            try {
+                int hours = Integer.parseInt(parts[0].trim());
+                int minutes = Integer.parseInt(parts[1].trim());
+                if (hours < 0 || minutes < 0 || minutes >= 60) {
+                    return null;
+                }
+                return (long) hours * 60 + minutes;
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        try {
+            int total = Integer.parseInt(text.trim());
+            return total >= 0 ? (long) total : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private void setTimeSelection(
+        ComboBox<Integer> hourChoice,
+        ComboBox<Integer> minuteChoice,
+        int hour,
+        int minute,
+        int timeGridMinutes
+    ) {
+        if (hour >= 0 && hour < 24 && hourChoice.getItems().contains(hour)) {
+            hourChoice.getSelectionModel().select(Integer.valueOf(hour));
+        }
+        selectMinute(minuteChoice, minute);
     }
 
     private HBox createDateTimeRow(DatePicker datePicker, ComboBox<Integer> hourChoice, ComboBox<Integer> minuteChoice) {

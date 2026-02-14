@@ -11,6 +11,6 @@ public class JTimeSheetApplication extends Application {
 
     @Override
     public void start(Stage stage) {
-        new MainController().start(stage);
+        new MainController().start(stage, getHostServices());
     }
 }
