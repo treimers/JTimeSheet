@@ -18,6 +18,8 @@ import java.util.ResourceBundle;
 
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar.ButtonData;
 import javafx.scene.control.ButtonType;
@@ -242,6 +244,16 @@ public class SettingsDialogView {
 
         dialog.getDialogPane().setContent(grid);
         dialog.setResultConverter(button -> button == saveButton ? button : null);
+        dialog.setOnShown(e -> {
+            ((Button) dialog.getDialogPane().lookupButton(saveButton)).setDefaultButton(true);
+            dialog.getDialogPane().getScene().addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
+                if (ev.getCode() == KeyCode.ESCAPE) {
+                    dialog.setResult(null);
+                    dialog.close();
+                    ev.consume();
+                }
+            });
+        });
         Optional<ButtonType> result = dialog.showAndWait();
         if (result.isEmpty()) {
             return Optional.empty();

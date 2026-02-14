@@ -168,6 +168,10 @@ public class MainController {
     private Button clearTasksButton;
     private Button clearDatesButton;
     private Button consolidateButton;
+    private Button settingsButton;
+    private Button manageButton;
+    private Button addActivityToolbarButton;
+    private Button addViewButton;
     private TableColumn<Activity, String> customerColumn;
     private TableColumn<Activity, String> projectColumn;
     private TableColumn<Activity, String> taskColumn;
@@ -364,15 +368,15 @@ public class MainController {
     }
 
     private ToolBar createMainToolBar() {
-        Button addButton = toolbarButton(i18n("menu.activity.add"), "add", this::addActivity);
-        Button addViewButton = toolbarButton(i18n("menu.view.new"), "add", this::openNewViewDialog);
-        Button manageButton = toolbarButton(i18n("menu.manage.open"), "manage", this::openManagementDialog);
+        addActivityToolbarButton = toolbarButton(i18n("menu.activity.add"), "add", this::addActivity);
+        addViewButton = toolbarButton(i18n("menu.view.new"), "add", this::openNewViewDialog);
+        manageButton = toolbarButton(i18n("menu.manage.open"), "manage", this::openManagementDialog);
         consolidateButton = toolbarButton(i18n("menu.activity.consolidate"), "manage", this::consolidateFilteredActivities);
         writeTimesheetButton = toolbarButton(i18n("menu.file.timesheet"), "export", this::writeTimesheet);
-        Button settingsButton = toolbarButton(i18n("menu.settings.open"), "manage", this::openSettingsDialog);
+        settingsButton = toolbarButton(i18n("menu.settings.open"), "manage", this::openSettingsDialog);
 
         return new ToolBar(
-            addButton,
+            addActivityToolbarButton,
             addViewButton,
             manageButton,
             consolidateButton,
@@ -2749,11 +2753,17 @@ public class MainController {
         if (newViewMenuItem != null) {
             newViewMenuItem.setText(i18n("menu.view.new"));
         }
+        if (addViewButton != null) {
+            addViewButton.setText(i18n("menu.view.new"));
+        }
         if (settingsMenu != null) {
             settingsMenu.setText(i18n("menu.settings"));
         }
         if (manageMenuItem != null) {
             manageMenuItem.setText(i18n("menu.manage.open"));
+        }
+        if (manageButton != null) {
+            manageButton.setText(i18n("menu.manage.open"));
         }
         if (importCsvMenuItem != null) {
             importCsvMenuItem.setText(i18n("menu.file.import"));
@@ -2767,6 +2777,12 @@ public class MainController {
         if (addActivityMenuItem != null) {
             addActivityMenuItem.setText(i18n("menu.activity.add"));
         }
+        if (addActivityToolbarButton != null) {
+            addActivityToolbarButton.setText(i18n("menu.activity.add"));
+        }
+        if (writeTimesheetButton != null) {
+            writeTimesheetButton.setText(i18n("menu.file.timesheet"));
+        }
         if (editActivityMenuItem != null) {
             editActivityMenuItem.setText(i18n("menu.activity.edit"));
         }
@@ -2778,6 +2794,9 @@ public class MainController {
         }
         if (settingsMenuItem != null) {
             settingsMenuItem.setText(i18n("menu.settings.open"));
+        }
+        if (settingsButton != null) {
+            settingsButton.setText(i18n("menu.settings.open"));
         }
         if (contextAddActivityItem != null) {
             contextAddActivityItem.setText(i18n("menu.activity.add"));

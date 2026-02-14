@@ -39,6 +39,8 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.shape.SVGPath;
 import javafx.stage.FileChooser;
 import javafx.stage.Modality;
@@ -79,6 +81,9 @@ public class ManagementDialog {
     private Button templateBrowseButton;
     private Customer detailsCustomer;
     private boolean updatingDetails;
+    private boolean saveConfirmed;
+    /** Arbeitskopie: Änderungen erst bei Save übernehmen. */
+    private ObservableList<Customer> workingCopy;
 
     public ManagementDialog(
         ObservableList<Customer> customers,
@@ -95,6 +100,7 @@ public class ManagementDialog {
     }
 
     public void show(Stage owner) {
+        workingCopy = deepCopyCustomers(customers);
         ensureManagementTree();
 
         MenuBar menuBar = new MenuBar(
@@ -127,17 +133,49 @@ public class ManagementDialog {
         HBox.setHgrow(detailsPanel, Priority.ALWAYS);
         detailsPanel.setPrefWidth(420);
 
+        Button saveButton = new Button(i18n("button.save"));
+        saveButton.setDefaultButton(true);
+        Button cancelButton = new Button(i18n("button.cancel"));
+        saveButton.setOnAction(e -> {
+            saveConfirmed = true;
+            dialogStage.close();
+        });
+        cancelButton.setOnAction(e -> {
+            saveConfirmed = false;
+            dialogStage.close();
+        });
+        HBox buttonBar = new HBox(10, cancelButton, saveButton);
+        buttonBar.setPadding(new Insets(10));
+        buttonBar.setStyle("-fx-background-color: transparent;");
+
         BorderPane root = new BorderPane();
         root.setTop(new VBox(menuBar, toolBar));
         root.setCenter(content);
+        root.setBottom(buttonBar);
         BorderPane.setMargin(content, new Insets(10));
 
         dialogStage = new Stage();
         dialogStage.initOwner(owner);
         dialogStage.initModality(Modality.APPLICATION_MODAL);
         dialogStage.setTitle(i18n("management.title"));
-        dialogStage.setScene(new Scene(root, 1160, 760));
-        dialogStage.setOnHiding(event -> commitAllDetails());
+        Scene scene = new Scene(root, 1160, 760);
+        root.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
+            if (e.getCode() == KeyCode.ESCAPE) {
+                saveConfirmed = false;
+                dialogStage.close();
+                e.consume();
+            }
+        });
+        dialogStage.setScene(scene);
+        dialogStage.setOnHiding(event -> {
+            if (saveConfirmed) {
+                commitAllDetails();
+                removeActivitiesForRemovedEntities();
+                customers.clear();
+                customers.addAll(workingCopy);
+                onSave.run();
+            }
+        });
         dialogStage.showAndWait();
     }
 
@@ -204,6 +242,65 @@ public class ManagementDialog {
         Label label = new Label(text);
         label.setStyle("-fx-font-size: 16px; -fx-font-weight: bold;");
         return label;
+    }
+
+    private static ObservableList<Customer> deepCopyCustomers(ObservableList<Customer> source) {
+        ObservableList<Customer> copy = FXCollections.observableArrayList();
+        for (Customer c : source) {
+            Customer cCopy = new Customer(
+                c.getId(), c.getName(), c.getAddress(),
+                c.getTimesheetTemplatePath(), c.getTimesheetFilenameSuggestion(),
+                c.getTimesheetRounding(), c.getTimesheetSheetNo(),
+                c.getTimesheetMonthRow(), c.getTimesheetMonthColumn(),
+                c.getTimesheetDataRow(), c.getTimesheetDateColumn(),
+                c.getTimesheetStartColumn(), c.getTimesheetEndColumn(),
+                c.getTimesheetPauseColumn(), c.getTimesheetTaskColumn(),
+                c.getTimesheetEvaluateFormulas(), c.getTimesheetTaskSeparator()
+            );
+            for (Project p : c.getProjects()) {
+                Project pCopy = new Project(p.getId(), p.getName());
+                for (Task t : p.getTasks()) {
+                    pCopy.getTasks().add(new Task(t.getId(), t.getName()));
+                }
+                cCopy.getProjects().add(pCopy);
+            }
+            copy.add(cCopy);
+        }
+        return copy;
+    }
+
+    private void removeActivitiesForRemovedEntities() {
+        java.util.Set<String> copyCustomerIds = new java.util.HashSet<>();
+        for (Customer c : workingCopy) {
+            copyCustomerIds.add(c.getId());
+        }
+        for (Customer c : customers) {
+            if (!copyCustomerIds.contains(c.getId())) {
+                activityCallbacks.removeActivitiesForCustomer(c.getId());
+            }
+        }
+        for (Customer c : customers) {
+            Customer inCopy = workingCopy.stream().filter(x -> x.getId().equals(c.getId())).findFirst().orElse(null);
+            if (inCopy == null) continue;
+            java.util.Set<String> copyProjectIds = new java.util.HashSet<>();
+            for (Project p : inCopy.getProjects()) copyProjectIds.add(p.getId());
+            for (Project p : c.getProjects()) {
+                if (!copyProjectIds.contains(p.getId())) {
+                    activityCallbacks.removeActivitiesForProject(c.getId(), p.getId());
+                }
+            }
+            for (Project p : c.getProjects()) {
+                Project inCopyP = inCopy.getProjects().stream().filter(x -> x.getId().equals(p.getId())).findFirst().orElse(null);
+                if (inCopyP == null) continue;
+                java.util.Set<String> copyTaskIds = new java.util.HashSet<>();
+                for (Task t : inCopyP.getTasks()) copyTaskIds.add(t.getId());
+                for (Task t : p.getTasks()) {
+                    if (!copyTaskIds.contains(t.getId())) {
+                        activityCallbacks.removeActivitiesForTask(c.getId(), p.getId(), t.getId());
+                    }
+                }
+            }
+        }
     }
 
     private void ensureManagementTree() {
@@ -319,85 +416,7 @@ public class ManagementDialog {
     }
 
     private void configureDetailsHandlers() {
-        customerNameField.setOnAction(event -> commitCustomerName());
-        customerNameField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (!isFocused) {
-                commitCustomerName();
-            }
-        });
-        customerAddressArea.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (!isFocused) {
-                commitCustomerAddress();
-            }
-        });
-        templatePathField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (!isFocused) {
-                commitCustomerTemplatePath();
-            }
-        });
-        timesheetNameField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (!isFocused) {
-                commitTimesheetNameSuggestion();
-            }
-        });
-        timesheetRoundingField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (!isFocused) {
-                commitTimesheetRounding();
-            }
-        });
-        timesheetSheetNoField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (!isFocused) {
-                commitTimesheetSheetNo();
-            }
-        });
-        timesheetMonthRowField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (!isFocused) {
-                commitTimesheetMonthRow();
-            }
-        });
-        timesheetMonthColumnField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (!isFocused) {
-                commitTimesheetMonthColumn();
-            }
-        });
-        timesheetDataRowField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (!isFocused) {
-                commitTimesheetDataRow();
-            }
-        });
-        timesheetDateColumnField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (!isFocused) {
-                commitTimesheetDateColumn();
-            }
-        });
-        timesheetStartColumnField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (!isFocused) {
-                commitTimesheetStartColumn();
-            }
-        });
-        timesheetEndColumnField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (!isFocused) {
-                commitTimesheetEndColumn();
-            }
-        });
-        timesheetPauseColumnField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (!isFocused) {
-                commitTimesheetPauseColumn();
-            }
-        });
-        timesheetTaskColumnField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (!isFocused) {
-                commitTimesheetTaskColumn();
-            }
-        });
-        timesheetTaskSeparatorField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (!isFocused) {
-                commitTimesheetTaskSeparator();
-            }
-        });
-        timesheetEvaluateFormulasCheck.selectedProperty().addListener((obs, wasSelected, isSelected) -> {
-            commitTimesheetEvaluateFormulas();
-        });
+        // Keine Listener auf den Feldern – Änderungen werden nur bei Save aus den Controls gelesen (commitAllDetails).
     }
 
     private void updateDetailsForSelection(NodeData data) {
@@ -492,7 +511,6 @@ public class ManagementDialog {
             sortCustomers();
             rebuildTree();
             selectCustomer(detailsCustomer);
-            onSave.run();
         }
     }
 
@@ -506,7 +524,6 @@ public class ManagementDialog {
         }
         if (!value.equals(detailsCustomer.getAddress())) {
             detailsCustomer.setAddress(value);
-            onSave.run();
         }
     }
 
@@ -517,7 +534,6 @@ public class ManagementDialog {
         String value = normalizePath(templatePathField.getText());
         if (!value.equals(safeText(detailsCustomer.getTimesheetTemplatePath()))) {
             detailsCustomer.setTimesheetTemplatePath(value);
-            onSave.run();
         }
     }
 
@@ -528,7 +544,6 @@ public class ManagementDialog {
         String value = normalizePath(timesheetNameField.getText());
         if (!value.equals(safeText(detailsCustomer.getTimesheetFilenameSuggestion()))) {
             detailsCustomer.setTimesheetFilenameSuggestion(value);
-            onSave.run();
         }
     }
 
@@ -583,7 +598,6 @@ public class ManagementDialog {
         String value = Boolean.toString(timesheetEvaluateFormulasCheck.isSelected());
         if (!value.equals(safeText(detailsCustomer.getTimesheetEvaluateFormulas()))) {
             detailsCustomer.setTimesheetEvaluateFormulas(value);
-            onSave.run();
         }
     }
 
@@ -598,7 +612,6 @@ public class ManagementDialog {
         String value = normalizePath(field.getText());
         if (!value.equals(safeText(getter.apply(detailsCustomer)))) {
             setter.accept(detailsCustomer, value);
-            onSave.run();
         }
     }
 
@@ -642,9 +655,6 @@ public class ManagementDialog {
         java.io.File file = chooser.showOpenDialog(dialogStage);
         if (file != null) {
             targetField.setText(file.getAbsolutePath());
-            if (targetField == templatePathField) {
-                commitCustomerTemplatePath();
-            }
         }
     }
 
@@ -664,7 +674,7 @@ public class ManagementDialog {
 
     private void rebuildTree() {
         rootItem.getChildren().clear();
-        for (Customer customer : customers) {
+        for (Customer customer : workingCopy) {
             TreeItem<NodeData> customerItem = new TreeItem<>(NodeData.customer(customer));
             customerItem.setExpanded(true);
             for (Project project : customer.getProjects()) {
@@ -683,11 +693,10 @@ public class ManagementDialog {
         Optional<String> name = promptForText(i18n("management.customer.new.title"), i18n("management.customer.new.label"));
         name.ifPresent(value -> {
             Customer customer = new Customer(value);
-            customers.add(customer);
+            workingCopy.add(customer);
             sortCustomers();
             rebuildTree();
             selectCustomer(customer);
-            onSave.run();
         });
     }
 
@@ -707,7 +716,6 @@ public class ManagementDialog {
             sortCustomers();
             rebuildTree();
             selectCustomer(customer);
-            onSave.run();
         });
     }
 
@@ -723,10 +731,8 @@ public class ManagementDialog {
             message += " " + i18n("management.delete.activities", activityCount);
         }
         if (confirmDelete(i18n("management.customer.delete.title"), message)) {
-            customers.remove(customer);
-            activityCallbacks.removeActivitiesForCustomer(customer.getId());
+            workingCopy.remove(customer);
             rebuildTree();
-            onSave.run();
         }
     }
 
@@ -743,7 +749,6 @@ public class ManagementDialog {
             sortProjects(customer);
             rebuildTree();
             selectProject(customer, project);
-            onSave.run();
         });
     }
 
@@ -763,7 +768,6 @@ public class ManagementDialog {
             sortProjects(selected.customer);
             rebuildTree();
             selectProject(selected.customer, selected.project);
-            onSave.run();
         });
     }
 
@@ -783,10 +787,8 @@ public class ManagementDialog {
         }
         if (confirmDelete(i18n("management.project.delete.title"), message)) {
             selected.customer.getProjects().remove(selected.project);
-            activityCallbacks.removeActivitiesForProject(selected.customer.getId(), selected.project.getId());
             rebuildTree();
             selectCustomer(selected.customer);
-            onSave.run();
         }
     }
 
@@ -802,7 +804,6 @@ public class ManagementDialog {
             sortTasks(selected.project);
             rebuildTree();
             selectTask(selected.customer, selected.project, value);
-            onSave.run();
         });
     }
 
@@ -818,14 +819,10 @@ public class ManagementDialog {
             selected.task.getName()
         );
         name.ifPresent(value -> {
-            int index = selected.project.getTasks().indexOf(selected.task);
-            if (index >= 0) {
-                selected.project.getTasks().set(index, new Task(value));
-                sortTasks(selected.project);
-                rebuildTree();
-                selectTask(selected.customer, selected.project, value);
-                onSave.run();
-            }
+            selected.task.setName(value);
+            sortTasks(selected.project);
+            rebuildTree();
+            selectTask(selected.customer, selected.project, value);
         });
     }
 
@@ -846,14 +843,8 @@ public class ManagementDialog {
         }
         if (confirmDelete(i18n("management.task.delete.title"), message)) {
             selected.project.getTasks().remove(selected.task);
-            activityCallbacks.removeActivitiesForTask(
-                selected.customer.getId(),
-                selected.project.getId(),
-                selected.task.getId()
-            );
             rebuildTree();
             selectProject(selected.customer, selected.project);
-            onSave.run();
         }
     }
 
@@ -966,8 +957,8 @@ public class ManagementDialog {
     }
 
     private void sortCustomers() {
-        FXCollections.sort(customers, Comparator.comparing(customer -> sortKey(customer.getName())));
-        for (Customer customer : customers) {
+        FXCollections.sort(workingCopy, Comparator.comparing(customer -> sortKey(customer.getName())));
+        for (Customer customer : workingCopy) {
             sortProjects(customer);
         }
     }
