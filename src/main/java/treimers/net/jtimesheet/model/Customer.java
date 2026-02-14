@@ -16,11 +16,11 @@ public class Customer {
     private final List<Project> projects = new ArrayList<>();
 
     public Customer(String name) {
-        this(UUID.randomUUID().toString(), name, "", "", "", "", "", ",");
+        this(UUID.randomUUID().toString(), name, "", "", "", "", "0", ",");
     }
 
     public Customer(String id, String name) {
-        this(id, name, "", "", "", "", "", ",");
+        this(id, name, "", "", "", "", "0", ",");
     }
 
     public Customer(

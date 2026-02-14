@@ -1241,6 +1241,11 @@ public class MainController {
             return;
         }
         restoringViewTabs = true;
+        // Remove all tabs except the first (main tab) so we don't duplicate when called from loadData()
+        while (viewTabPane.getTabs().size() > 1) {
+            viewTabPane.getTabs().remove(viewTabPane.getTabs().size() - 1);
+        }
+        viewTabStates.clear();
         int count = preferences.getInt("view.count", 0);
         for (int i = 0; i < count; i++) {
             String prefix = "view." + i + ".";
