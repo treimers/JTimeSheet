@@ -13,6 +13,12 @@
 **Datei → Stundenzettel schreiben…** – Schreibt die sichtbaren Aktivitäten in einen **Excel**-Stundenzettel. Voraussetzung:
 
 1. Ein **Kunde** muss ausgewählt sein (über den Filter der Hauptansicht oder eine Ansicht mit festem Kunden).
-2. Der Kunde muss unter Verwalten → Eigenschaften **Stundenzettel-Einstellungen** und eine **Excel-Vorlage** haben.
+2. Der Kunde muss unter Verwalten → Eigenschaften **Stundenzettel-Einstellungen** haben: **Tabellennummer**, **Excel-Vorlage** (Pfad zu einer vorhandenen .xls- oder .xlsx-Datei) und optional **Stundenzettel-Dateiname** und **Aufgaben-Trenner**.
 
-Die Anwendung füllt die Vorlage mit den Aktivitätsdaten (Datum, Zeiten, Aufgaben) und Sie speichern die resultierende Datei. Nützlich für monatliche oder wöchentliche Stundenzettel pro Kunde.
+Die Anwendung füllt die Vorlage mit den Aktivitätsdaten (Datum, Zeiten, Pausen, Aufgaben) und Sie speichern die resultierende Datei. **Format:** Die Erweiterung der Zieldatei (.xls oder .xlsx) richtet sich immer nach der Vorlage; der vorgeschlagene Dateiname verwendet die gleiche Erweiterung.
+
+**Layout der Vorlage:** Das Layout (wo Monat, Start, Ende, Pause, Aufgaben stehen) wird aus Platzhaltern im Template erkannt: **$month**, **$start**, **$end**, **$pause**, **$task**. Diese Marken müssen in der Excel-Vorlage in der ersten Datenzeile stehen. Fehlen sie, erscheint eine Fehlermeldung – es gibt keine manuelle Zeilen-/Spaltenkonfiguration mehr pro Kunde. Leere Pausen werden als **0:00** geschrieben. Formeln in der Vorlage werden vor dem Speichern ausgewertet.
+
+![Excel-Vorlage mit Platzhaltern](../timesheet-template-mockup.png)
+
+**Fehlerfälle:** Ist keine Vorlage hinterlegt oder die Vorlagendatei existiert nicht, erscheint eine Fehlermeldung (kein Dialog zum Nachwählen der Datei). Die Vorlage muss unter Verwalten korrekt und auf eine existierende Datei zeigend eingetragen sein.

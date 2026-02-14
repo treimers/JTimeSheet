@@ -220,6 +220,7 @@ public class MainController {
             settingsMenu(),
             helpMenu()
         );
+        menuBar.setUseSystemMenuBar(true);
 
         activityTable = createActivityTable();
         ToolBar toolBar = createMainToolBar();
