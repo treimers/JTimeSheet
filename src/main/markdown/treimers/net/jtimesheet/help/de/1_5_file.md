@@ -19,6 +19,10 @@ Die Anwendung füllt die Vorlage mit den Aktivitätsdaten (Datum, Zeiten, Pausen
 
 **Layout der Vorlage:** Das Layout (wo Monat, Start, Ende, Pause, Aufgaben stehen) wird aus Platzhaltern im Template erkannt: **$month**, **$start**, **$end**, **$pause**, **$task**. Diese Marken müssen in der Excel-Vorlage in der ersten Datenzeile stehen. Fehlen sie, erscheint eine Fehlermeldung – es gibt keine manuelle Zeilen-/Spaltenkonfiguration mehr pro Kunde. Leere Pausen werden als **0:00** geschrieben. Formeln in der Vorlage werden vor dem Speichern ausgewertet.
 
-![Excel-Vorlage mit Platzhaltern](../timesheet-template-mockup.png)
+<img src="../timesheet-template-mockup.png" alt="Excel-Vorlage mit Platzhaltern" width="421" height="439">
+
+Das ergibt beim Schreiben folgenden Stundenzettel:
+
+<img src="../timesheet.png" alt="Stundenzettel" width="421" height="439">
 
 **Fehlerfälle:** Ist keine Vorlage hinterlegt oder die Vorlagendatei existiert nicht, erscheint eine Fehlermeldung (kein Dialog zum Nachwählen der Datei). Die Vorlage muss unter Verwalten korrekt und auf eine existierende Datei zeigend eingetragen sein.

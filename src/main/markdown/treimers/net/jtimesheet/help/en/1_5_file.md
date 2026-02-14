@@ -19,6 +19,10 @@ The application fills the template with the activity data (dates, times, pauses,
 
 **Template layout:** The layout (where month, start, end, pause, and tasks go) is discovered from placeholders in the template: **$month**, **$start**, **$end**, **$pause**, **$task**. These markers must appear in the first data row of the Excel template. If they are missing, an error is shown – there is no per-customer row/column configuration. Empty pauses are written as **0:00**. Formulas in the template are evaluated before saving.
 
-![Excel template with placeholders](../timesheet-template-mockup.png)
+<img src="../timesheet-template-mockup.png" alt="Excel template with placeholders" width="421" height="439">
+
+This gives the following time sheet:
+
+<img src="../timesheet.png" alt="Time sheet" width="421" height="439">
 
 **Errors:** If no template is set or the template file does not exist, an error message is shown (no dialog to pick a file). The template path must be set correctly in Manage and point to an existing file.
