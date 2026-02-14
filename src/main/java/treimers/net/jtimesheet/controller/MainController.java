@@ -43,6 +43,8 @@ import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
 import javafx.stage.Modality;
 import javafx.beans.property.SimpleStringProperty;
@@ -150,6 +152,7 @@ public class MainController {
     private MenuItem importCsvMenuItem;
     private MenuItem exportCsvMenuItem;
     private MenuItem writeTimesheetMenuItem;
+    private MenuItem exitMenuItem;
     private MenuItem addActivityMenuItem;
     private MenuItem editActivityMenuItem;
     private MenuItem deleteActivityMenuItem;
@@ -280,6 +283,7 @@ public class MainController {
             "manage",
             this::openManagementDialog
         );
+        manageMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.M, KeyCombination.SHORTCUT_DOWN));
         manageMenu = new Menu(i18n("menu.manage"));
         manageMenu.getItems().add(manageMenuItem);
         return manageMenu;
@@ -289,14 +293,22 @@ public class MainController {
         importCsvMenuItem = menuItemWithIcon(i18n("menu.file.import"), "import", this::importCsv);
         exportCsvMenuItem = menuItemWithIcon(i18n("menu.file.export"), "export", this::exportCsv);
         writeTimesheetMenuItem = menuItemWithIcon(i18n("menu.file.timesheet"), "export", this::writeTimesheet);
+        writeTimesheetMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.W, KeyCombination.SHORTCUT_DOWN));
+        exitMenuItem = menuItemWithIcon(i18n("menu.file.exit"), "manage", Platform::exit);
+        exitMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.Q, KeyCombination.SHORTCUT_DOWN));
 
         fileMenu = new Menu(i18n("menu.file"));
-        fileMenu.getItems().addAll(importCsvMenuItem, exportCsvMenuItem, writeTimesheetMenuItem);
+        fileMenu.getItems().addAll(
+            importCsvMenuItem, exportCsvMenuItem, writeTimesheetMenuItem,
+            new SeparatorMenuItem(),
+            exitMenuItem
+        );
         return fileMenu;
     }
 
     private Menu activityMenu() {
         addActivityMenuItem = menuItemWithIcon(i18n("menu.activity.add"), "add", this::addActivity);
+        addActivityMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.A, KeyCombination.SHORTCUT_DOWN));
         editActivityMenuItem = menuItemWithIcon(i18n("menu.activity.edit"), "edit", this::editActivity);
         deleteActivityMenuItem = menuItemWithIcon(i18n("menu.activity.delete"), "delete", this::deleteActivity);
         consolidateActivityMenuItem = menuItemWithIcon(
@@ -304,6 +316,7 @@ public class MainController {
             "manage",
             this::consolidateFilteredActivities
         );
+        consolidateActivityMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.C, KeyCombination.SHORTCUT_DOWN));
         activityMenu = new Menu(i18n("menu.activity"));
         activityMenu.getItems().addAll(
             addActivityMenuItem,
@@ -318,12 +331,14 @@ public class MainController {
     private Menu viewMenu() {
         viewMenu = new Menu(i18n("menu.view"));
         newViewMenuItem = menuItemWithIcon(i18n("menu.view.new"), "add", this::openNewViewDialog);
+        newViewMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.V, KeyCombination.SHORTCUT_DOWN));
         viewMenu.getItems().add(newViewMenuItem);
         return viewMenu;
     }
 
     private Menu settingsMenu() {
         settingsMenuItem = menuItemWithIcon(i18n("menu.settings.open"), "manage", this::openSettingsDialog);
+        settingsMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.S, KeyCombination.SHORTCUT_DOWN));
         settingsMenu = new Menu(i18n("menu.settings"));
         settingsMenu.getItems().add(settingsMenuItem);
         return settingsMenu;
@@ -331,6 +346,7 @@ public class MainController {
 
     private Menu helpMenu() {
         helpMenuItem = menuItemWithIcon(i18n("menu.help"), "manage", this::doHelp);
+        helpMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.F1));
         helpMenu = new Menu(i18n("menu.help"));
         helpMenu.getItems().add(helpMenuItem);
         return helpMenu;
@@ -341,7 +357,12 @@ public class MainController {
             helpDialog = createHelpDialog();
         }
         if (helpDialog != null) {
-            helpDialog.showAndWait();
+            if (helpDialog.isShowing()) {
+                helpDialog.toFront();
+                helpDialog.requestFocus();
+            } else {
+                helpDialog.showAndWait();
+            }
         }
     }
 
@@ -2843,6 +2864,9 @@ public class MainController {
         }
         if (writeTimesheetMenuItem != null) {
             writeTimesheetMenuItem.setText(i18n("menu.file.timesheet"));
+        }
+        if (exitMenuItem != null) {
+            exitMenuItem.setText(i18n("menu.file.exit"));
         }
         if (addActivityMenuItem != null) {
             addActivityMenuItem.setText(i18n("menu.activity.add"));
