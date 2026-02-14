@@ -1,6 +1,9 @@
 package treimers.net.jtimesheet.model;
 
+import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.util.EnumSet;
+import java.util.Set;
 
 public class AppSettings {
     public static final int DEFAULT_TIME_GRID_MINUTES = 1;
@@ -12,6 +15,7 @@ public class AppSettings {
     private int reminderIntervalMinutes = DEFAULT_REMINDER_INTERVAL_MINUTES;
     private LocalTime reminderStartTime = LocalTime.of(9, 0);
     private LocalTime reminderEndTime = LocalTime.of(17, 0);
+    private Set<DayOfWeek> reminderWeekdays = EnumSet.range(DayOfWeek.MONDAY, DayOfWeek.FRIDAY);
     private String dataDirectory = DEFAULT_DATA_DIRECTORY;
 
     public int getTimeGridMinutes() {
@@ -54,6 +58,16 @@ public class AppSettings {
         }
         reminderStartTime = start;
         reminderEndTime = end;
+    }
+
+    public Set<DayOfWeek> getReminderWeekdays() {
+        return reminderWeekdays != null ? reminderWeekdays : EnumSet.range(DayOfWeek.MONDAY, DayOfWeek.FRIDAY);
+    }
+
+    public void setReminderWeekdays(Set<DayOfWeek> weekdays) {
+        reminderWeekdays = (weekdays == null || weekdays.isEmpty())
+            ? EnumSet.range(DayOfWeek.MONDAY, DayOfWeek.FRIDAY)
+            : EnumSet.copyOf(weekdays);
     }
 
     public String getDataDirectory() {

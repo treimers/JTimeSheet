@@ -1,8 +1,13 @@
 package treimers.net.jtimesheet.view;
 
 import java.io.File;
+import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
+import java.util.Map;
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -16,6 +21,7 @@ import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar.ButtonData;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
@@ -160,6 +166,16 @@ public class SettingsDialogView {
             }
         });
 
+        Set<DayOfWeek> currentWeekdays = settings.getReminderWeekdays();
+        Map<DayOfWeek, CheckBox> weekdayCheckBoxes = new java.util.HashMap<>();
+        HBox weekdaysBox = new HBox(8);
+        for (DayOfWeek day : DayOfWeek.values()) {
+            CheckBox cb = new CheckBox(day.getDisplayName(TextStyle.SHORT_STANDALONE, locale));
+            cb.setSelected(currentWeekdays.contains(day));
+            weekdayCheckBoxes.put(day, cb);
+            weekdaysBox.getChildren().add(cb);
+        }
+
         ComboBox<Language> languageChoice = new ComboBox<>(FXCollections.observableArrayList(Language.ENGLISH, Language.GERMAN));
         languageChoice.getSelectionModel().select(settings.getLanguage());
         languageChoice.setCellFactory(listView -> new ListCell<>() {
@@ -217,10 +233,12 @@ public class SettingsDialogView {
         grid.add(reminderStartChoice, 1, 2);
         grid.add(new Label(i18n("settings.reminder.end.label")), 0, 3);
         grid.add(reminderEndChoice, 1, 3);
-        grid.add(new Label(i18n("settings.language.label")), 0, 4);
-        grid.add(languageChoice, 1, 4);
-        grid.add(new Label(i18n("settings.dataFolder.label")), 0, 5);
-        grid.add(dataDirectoryBox, 1, 5);
+        grid.add(new Label(i18n("settings.reminder.weekdays.label")), 0, 4);
+        grid.add(weekdaysBox, 1, 4);
+        grid.add(new Label(i18n("settings.language.label")), 0, 5);
+        grid.add(languageChoice, 1, 5);
+        grid.add(new Label(i18n("settings.dataFolder.label")), 0, 6);
+        grid.add(dataDirectoryBox, 1, 6);
 
         dialog.getDialogPane().setContent(grid);
         dialog.setResultConverter(button -> button == saveButton ? button : null);
@@ -228,11 +246,21 @@ public class SettingsDialogView {
         if (result.isEmpty()) {
             return Optional.empty();
         }
+        Set<DayOfWeek> selectedWeekdays = EnumSet.noneOf(DayOfWeek.class);
+        for (Map.Entry<DayOfWeek, CheckBox> e : weekdayCheckBoxes.entrySet()) {
+            if (e.getValue().isSelected()) {
+                selectedWeekdays.add(e.getKey());
+            }
+        }
+        if (selectedWeekdays.isEmpty()) {
+            selectedWeekdays = EnumSet.range(DayOfWeek.MONDAY, DayOfWeek.FRIDAY);
+        }
         return Optional.of(new SettingsResult(
             timeGridChoice.getValue(),
             reminderIntervalChoice.getValue(),
             reminderStartChoice.getValue(),
             reminderEndChoice.getValue(),
+            selectedWeekdays,
             languageChoice.getValue(),
             dataDirectoryField.getText()
         ));
@@ -286,6 +314,7 @@ public class SettingsDialogView {
         private final int reminderIntervalMinutes;
         private final LocalTime reminderStart;
         private final LocalTime reminderEnd;
+        private final Set<DayOfWeek> reminderWeekdays;
         private final Language language;
         private final String dataDirectory;
 
@@ -294,6 +323,7 @@ public class SettingsDialogView {
             int reminderIntervalMinutes,
             LocalTime reminderStart,
             LocalTime reminderEnd,
+            Set<DayOfWeek> reminderWeekdays,
             Language language,
             String dataDirectory
         ) {
@@ -301,6 +331,7 @@ public class SettingsDialogView {
             this.reminderIntervalMinutes = reminderIntervalMinutes;
             this.reminderStart = reminderStart;
             this.reminderEnd = reminderEnd;
+            this.reminderWeekdays = reminderWeekdays;
             this.language = language;
             this.dataDirectory = dataDirectory;
         }
@@ -319,6 +350,10 @@ public class SettingsDialogView {
 
         public LocalTime getReminderEnd() {
             return reminderEnd;
+        }
+
+        public Set<DayOfWeek> getReminderWeekdays() {
+            return reminderWeekdays;
         }
 
         public Language getLanguage() {

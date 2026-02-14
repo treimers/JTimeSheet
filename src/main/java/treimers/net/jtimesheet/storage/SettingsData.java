@@ -6,4 +6,6 @@ public class SettingsData {
     public Integer reminderIntervalMinutes;
     public String reminderStart;
     public String reminderEnd;
+    /** Comma-separated day names, e.g. MON,TUE,WED,THU,FRI */
+    public String reminderWeekdays;
 }

@@ -23,7 +23,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.MissingResourceException;
+import java.util.EnumSet;
 import java.util.Optional;
+import java.util.Set;
 import java.util.Properties;
 import java.util.ResourceBundle;
 import java.util.UUID;
@@ -1597,10 +1599,15 @@ public class MainController {
         int interval = AppSettings.normalizeReminderIntervalMinutes(settings.getReminderIntervalMinutes());
         LocalTime start = settings.getReminderStartTime();
         LocalTime end = settings.getReminderEndTime();
+        Set<DayOfWeek> weekdays = settings.getReminderWeekdays();
         LocalDateTime candidate = alignToReminderInterval(now, interval);
 
         while (true) {
             LocalDate date = candidate.toLocalDate();
+            if (!weekdays.contains(date.getDayOfWeek())) {
+                candidate = alignToReminderInterval(LocalDateTime.of(date.plusDays(1), start), interval);
+                continue;
+            }
             LocalDateTime windowStart = LocalDateTime.of(date, start);
             LocalDateTime windowEnd = LocalDateTime.of(date, end);
             if (candidate.isBefore(windowStart)) {
@@ -2093,6 +2100,7 @@ public class MainController {
             settings.setTimeGridMinutes(values.getTimeGridMinutes());
             settings.setReminderIntervalMinutes(values.getReminderIntervalMinutes());
             settings.setReminderWindow(values.getReminderStart(), values.getReminderEnd());
+            settings.setReminderWeekdays(values.getReminderWeekdays());
             settings.setLanguage(values.getLanguage());
             settings.setDataDirectory(values.getDataDirectory());
             settingsService.save(settings);
@@ -2644,6 +2652,7 @@ public class MainController {
             settings.setTimeGridMinutes(AppSettings.DEFAULT_TIME_GRID_MINUTES);
             settings.setReminderIntervalMinutes(AppSettings.DEFAULT_REMINDER_INTERVAL_MINUTES);
             settings.setReminderWindow(LocalTime.of(9, 0), LocalTime.of(17, 0));
+            settings.setReminderWeekdays(EnumSet.range(DayOfWeek.MONDAY, DayOfWeek.FRIDAY));
         } else {
             settings.setLanguage(Language.fromCode(data.language));
             settings.setTimeGridMinutes(data.timeGridMinutes);
@@ -2651,6 +2660,10 @@ public class MainController {
             LocalTime start = parseTimeValue(data.reminderStart, LocalTime.of(9, 0));
             LocalTime end = parseTimeValue(data.reminderEnd, LocalTime.of(17, 0));
             settings.setReminderWindow(start, end);
+            Set<DayOfWeek> weekdays = parseWeekdaysValue(data.reminderWeekdays);
+            if (weekdays != null && !weekdays.isEmpty()) {
+                settings.setReminderWeekdays(weekdays);
+            }
         }
         settingsService.save(settings);
     }
@@ -2902,6 +2915,24 @@ public class MainController {
             return LocalTime.parse(value, TIME_FORMAT);
         } catch (DateTimeParseException exception) {
             return fallback;
+        }
+    }
+
+    private Set<DayOfWeek> parseWeekdaysValue(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            Set<DayOfWeek> result = EnumSet.noneOf(DayOfWeek.class);
+            for (String part : value.split(",")) {
+                String trimmed = part.trim();
+                if (!trimmed.isEmpty()) {
+                    result.add(DayOfWeek.valueOf(trimmed));
+                }
+            }
+            return result.isEmpty() ? null : result;
+        } catch (Exception exception) {
+            return null;
         }
     }
 
