@@ -85,7 +85,7 @@ public class ActivityDialogView {
                 projectChoice.setItems(FXCollections.observableArrayList());
                 taskChoice.setItems(FXCollections.observableArrayList());
             } else {
-                projectChoice.setItems(newValue.getProjects());
+                projectChoice.setItems(FXCollections.observableArrayList(newValue.getProjects()));
                 projectChoice.getSelectionModel().clearSelection();
                 taskChoice.setItems(FXCollections.observableArrayList());
                 if (defaultSelectionForCustomer != null) {

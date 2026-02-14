@@ -1,5 +1,7 @@
 package treimers.net.jtimesheet.ui;
 
+import java.io.File;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Locale;
 import java.util.MissingResourceException;
@@ -18,7 +20,6 @@ import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar.ButtonData;
 import javafx.scene.control.ButtonType;
-import javafx.scene.control.CheckBox;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
@@ -56,6 +57,7 @@ public class ManagementDialog {
     private static final String TOOLBAR_BUTTON_NORMAL_STYLE = "";
     private final ObservableList<Customer> customers;
     private final Runnable onSave;
+    private final Runnable onCancel;
     private final ActivityCallbacks activityCallbacks;
     private final ResourceBundle messages;
     private final Locale locale;
@@ -66,41 +68,30 @@ public class ManagementDialog {
     private TextArea customerAddressArea;
     private TextField templatePathField;
     private TextField timesheetNameField;
-    private TextField timesheetRoundingField;
     private TextField timesheetSheetNoField;
-    private TextField timesheetMonthRowField;
-    private TextField timesheetMonthColumnField;
-    private TextField timesheetDataRowField;
-    private TextField timesheetDateColumnField;
-    private TextField timesheetStartColumnField;
-    private TextField timesheetEndColumnField;
-    private TextField timesheetPauseColumnField;
-    private TextField timesheetTaskColumnField;
     private TextField timesheetTaskSeparatorField;
-    private CheckBox timesheetEvaluateFormulasCheck;
     private Button templateBrowseButton;
     private Customer detailsCustomer;
     private boolean updatingDetails;
     private boolean saveConfirmed;
-    /** Arbeitskopie: Änderungen erst bei Save übernehmen. */
-    private ObservableList<Customer> workingCopy;
 
     public ManagementDialog(
         ObservableList<Customer> customers,
         Runnable onSave,
+        Runnable onCancel,
         ActivityCallbacks activityCallbacks,
         ResourceBundle messages,
         Locale locale
     ) {
         this.customers = customers;
         this.onSave = onSave;
+        this.onCancel = onCancel;
         this.activityCallbacks = activityCallbacks;
         this.messages = messages;
         this.locale = locale;
     }
 
     public void show(Stage owner) {
-        workingCopy = deepCopyCustomers(customers);
         ensureManagementTree();
 
         MenuBar menuBar = new MenuBar(
@@ -137,6 +128,16 @@ public class ManagementDialog {
         saveButton.setDefaultButton(true);
         Button cancelButton = new Button(i18n("button.cancel"));
         saveButton.setOnAction(e -> {
+            commitAllDetails();
+            String validationError = validateTemplatePaths();
+            if (validationError != null) {
+                Alert alert = new Alert(AlertType.ERROR);
+                alert.setTitle(i18n("management.title"));
+                alert.setHeaderText(null);
+                alert.setContentText(validationError);
+                alert.showAndWait();
+                return;
+            }
             saveConfirmed = true;
             dialogStage.close();
         });
@@ -169,11 +170,9 @@ public class ManagementDialog {
         dialogStage.setScene(scene);
         dialogStage.setOnHiding(event -> {
             if (saveConfirmed) {
-                commitAllDetails();
-                removeActivitiesForRemovedEntities();
-                customers.clear();
-                customers.addAll(workingCopy);
                 onSave.run();
+            } else if (onCancel != null) {
+                onCancel.run();
             }
         });
         dialogStage.showAndWait();
@@ -244,65 +243,6 @@ public class ManagementDialog {
         return label;
     }
 
-    private static ObservableList<Customer> deepCopyCustomers(ObservableList<Customer> source) {
-        ObservableList<Customer> copy = FXCollections.observableArrayList();
-        for (Customer c : source) {
-            Customer cCopy = new Customer(
-                c.getId(), c.getName(), c.getAddress(),
-                c.getTimesheetTemplatePath(), c.getTimesheetFilenameSuggestion(),
-                c.getTimesheetRounding(), c.getTimesheetSheetNo(),
-                c.getTimesheetMonthRow(), c.getTimesheetMonthColumn(),
-                c.getTimesheetDataRow(), c.getTimesheetDateColumn(),
-                c.getTimesheetStartColumn(), c.getTimesheetEndColumn(),
-                c.getTimesheetPauseColumn(), c.getTimesheetTaskColumn(),
-                c.getTimesheetEvaluateFormulas(), c.getTimesheetTaskSeparator()
-            );
-            for (Project p : c.getProjects()) {
-                Project pCopy = new Project(p.getId(), p.getName());
-                for (Task t : p.getTasks()) {
-                    pCopy.getTasks().add(new Task(t.getId(), t.getName()));
-                }
-                cCopy.getProjects().add(pCopy);
-            }
-            copy.add(cCopy);
-        }
-        return copy;
-    }
-
-    private void removeActivitiesForRemovedEntities() {
-        java.util.Set<String> copyCustomerIds = new java.util.HashSet<>();
-        for (Customer c : workingCopy) {
-            copyCustomerIds.add(c.getId());
-        }
-        for (Customer c : customers) {
-            if (!copyCustomerIds.contains(c.getId())) {
-                activityCallbacks.removeActivitiesForCustomer(c.getId());
-            }
-        }
-        for (Customer c : customers) {
-            Customer inCopy = workingCopy.stream().filter(x -> x.getId().equals(c.getId())).findFirst().orElse(null);
-            if (inCopy == null) continue;
-            java.util.Set<String> copyProjectIds = new java.util.HashSet<>();
-            for (Project p : inCopy.getProjects()) copyProjectIds.add(p.getId());
-            for (Project p : c.getProjects()) {
-                if (!copyProjectIds.contains(p.getId())) {
-                    activityCallbacks.removeActivitiesForProject(c.getId(), p.getId());
-                }
-            }
-            for (Project p : c.getProjects()) {
-                Project inCopyP = inCopy.getProjects().stream().filter(x -> x.getId().equals(p.getId())).findFirst().orElse(null);
-                if (inCopyP == null) continue;
-                java.util.Set<String> copyTaskIds = new java.util.HashSet<>();
-                for (Task t : inCopyP.getTasks()) copyTaskIds.add(t.getId());
-                for (Task t : p.getTasks()) {
-                    if (!copyTaskIds.contains(t.getId())) {
-                        activityCallbacks.removeActivitiesForTask(c.getId(), p.getId(), t.getId());
-                    }
-                }
-            }
-        }
-    }
-
     private void ensureManagementTree() {
         rootItem = new TreeItem<>(NodeData.root());
         rootItem.setExpanded(true);
@@ -326,18 +266,8 @@ public class ManagementDialog {
         customerAddressArea.setWrapText(true);
         templatePathField = new TextField();
         timesheetNameField = new TextField();
-        timesheetRoundingField = new TextField();
         timesheetSheetNoField = new TextField();
-        timesheetMonthRowField = new TextField();
-        timesheetMonthColumnField = new TextField();
-        timesheetDataRowField = new TextField();
-        timesheetDateColumnField = new TextField();
-        timesheetStartColumnField = new TextField();
-        timesheetEndColumnField = new TextField();
-        timesheetPauseColumnField = new TextField();
-        timesheetTaskColumnField = new TextField();
         timesheetTaskSeparatorField = new TextField();
-        timesheetEvaluateFormulasCheck = new CheckBox();
         templateBrowseButton = new Button(i18n("management.file.browse"));
         templateBrowseButton.setOnAction(event -> chooseCustomerFile(templatePathField, "*.xls", "*.xlsx"));
 
@@ -361,44 +291,19 @@ public class ManagementDialog {
         Label timesheetSectionLabel = new Label(i18n("management.customer.section.timesheet"));
         timesheetSectionLabel.setStyle("-fx-font-weight: bold;");
         grid.add(timesheetSectionLabel, 0, 4, 2, 1);
-        grid.add(new Label(i18n("management.customer.field.rounding")), 0, 5);
-        grid.add(timesheetRoundingField, 1, 5);
+        Label timesheetHint = new Label(i18n("management.customer.timesheet.hint"));
+        timesheetHint.setWrapText(true);
+        timesheetHint.setStyle("-fx-font-size: 11px; -fx-text-fill: gray;");
+        grid.add(timesheetHint, 0, 5, 2, 1);
         grid.add(new Label(i18n("management.customer.field.sheetNo")), 0, 6);
         grid.add(timesheetSheetNoField, 1, 6);
-        grid.add(new Label(i18n("management.customer.field.monthRow")), 0, 7);
-        grid.add(timesheetMonthRowField, 1, 7);
-        grid.add(new Label(i18n("management.customer.field.monthColumn")), 0, 8);
-        grid.add(timesheetMonthColumnField, 1, 8);
-        grid.add(new Label(i18n("management.customer.field.dataRow")), 0, 9);
-        grid.add(timesheetDataRowField, 1, 9);
-        grid.add(new Label(i18n("management.customer.field.dateColumn")), 0, 10);
-        grid.add(timesheetDateColumnField, 1, 10);
-        grid.add(new Label(i18n("management.customer.field.startColumn")), 0, 11);
-        grid.add(timesheetStartColumnField, 1, 11);
-        grid.add(new Label(i18n("management.customer.field.endColumn")), 0, 12);
-        grid.add(timesheetEndColumnField, 1, 12);
-        grid.add(new Label(i18n("management.customer.field.pauseColumn")), 0, 13);
-        grid.add(timesheetPauseColumnField, 1, 13);
-        grid.add(new Label(i18n("management.customer.field.taskColumn")), 0, 14);
-        grid.add(timesheetTaskColumnField, 1, 14);
-        grid.add(new Label(i18n("management.customer.field.evaluateFormulas")), 0, 15);
-        grid.add(timesheetEvaluateFormulasCheck, 1, 15);
-        grid.add(new Label(i18n("management.customer.field.taskSeparator")), 0, 16);
-        grid.add(timesheetTaskSeparatorField, 1, 16);
+        grid.add(new Label(i18n("management.customer.field.taskSeparator")), 0, 7);
+        grid.add(timesheetTaskSeparatorField, 1, 7);
         GridPane.setHgrow(customerNameField, Priority.ALWAYS);
         GridPane.setHgrow(customerAddressArea, Priority.ALWAYS);
         GridPane.setHgrow(templatePathField, Priority.ALWAYS);
         GridPane.setHgrow(timesheetNameField, Priority.ALWAYS);
-        GridPane.setHgrow(timesheetRoundingField, Priority.ALWAYS);
         GridPane.setHgrow(timesheetSheetNoField, Priority.ALWAYS);
-        GridPane.setHgrow(timesheetMonthRowField, Priority.ALWAYS);
-        GridPane.setHgrow(timesheetMonthColumnField, Priority.ALWAYS);
-        GridPane.setHgrow(timesheetDataRowField, Priority.ALWAYS);
-        GridPane.setHgrow(timesheetDateColumnField, Priority.ALWAYS);
-        GridPane.setHgrow(timesheetStartColumnField, Priority.ALWAYS);
-        GridPane.setHgrow(timesheetEndColumnField, Priority.ALWAYS);
-        GridPane.setHgrow(timesheetPauseColumnField, Priority.ALWAYS);
-        GridPane.setHgrow(timesheetTaskColumnField, Priority.ALWAYS);
         GridPane.setHgrow(timesheetTaskSeparatorField, Priority.ALWAYS);
 
         configureDetailsHandlers();
@@ -431,36 +336,16 @@ public class ManagementDialog {
             customerAddressArea.setText("");
             templatePathField.setText("");
             timesheetNameField.setText("");
-            timesheetRoundingField.setText("");
             timesheetSheetNoField.setText("");
-            timesheetMonthRowField.setText("");
-            timesheetMonthColumnField.setText("");
-            timesheetDataRowField.setText("");
-            timesheetDateColumnField.setText("");
-            timesheetStartColumnField.setText("");
-            timesheetEndColumnField.setText("");
-            timesheetPauseColumnField.setText("");
-            timesheetTaskColumnField.setText("");
             timesheetTaskSeparatorField.setText("");
-            timesheetEvaluateFormulasCheck.setSelected(false);
             setDetailsDisabled(true);
         } else {
             customerNameField.setText(safeText(customer.getName()));
             customerAddressArea.setText(safeText(customer.getAddress()));
             templatePathField.setText(safeText(customer.getTimesheetTemplatePath()));
             timesheetNameField.setText(safeText(customer.getTimesheetFilenameSuggestion()));
-            timesheetRoundingField.setText(safeText(customer.getTimesheetRounding()));
             timesheetSheetNoField.setText(safeText(customer.getTimesheetSheetNo()));
-            timesheetMonthRowField.setText(safeText(customer.getTimesheetMonthRow()));
-            timesheetMonthColumnField.setText(safeText(customer.getTimesheetMonthColumn()));
-            timesheetDataRowField.setText(safeText(customer.getTimesheetDataRow()));
-            timesheetDateColumnField.setText(safeText(customer.getTimesheetDateColumn()));
-            timesheetStartColumnField.setText(safeText(customer.getTimesheetStartColumn()));
-            timesheetEndColumnField.setText(safeText(customer.getTimesheetEndColumn()));
-            timesheetPauseColumnField.setText(safeText(customer.getTimesheetPauseColumn()));
-            timesheetTaskColumnField.setText(safeText(customer.getTimesheetTaskColumn()));
             timesheetTaskSeparatorField.setText(safeText(customer.getTimesheetTaskSeparator()));
-            timesheetEvaluateFormulasCheck.setSelected(isTrueOrDefault(customer.getTimesheetEvaluateFormulas(), true));
             setDetailsDisabled(false);
         }
         updatingDetails = false;
@@ -470,30 +355,13 @@ public class ManagementDialog {
         return value == null ? "" : value;
     }
 
-    private boolean isTrueOrDefault(String value, boolean fallback) {
-        if (value == null || value.isBlank()) {
-            return fallback;
-        }
-        return Boolean.parseBoolean(value.trim());
-    }
-
     private void setDetailsDisabled(boolean disabled) {
         customerNameField.setDisable(disabled);
         customerAddressArea.setDisable(disabled);
         templatePathField.setDisable(disabled);
         timesheetNameField.setDisable(disabled);
-        timesheetRoundingField.setDisable(disabled);
         timesheetSheetNoField.setDisable(disabled);
-        timesheetMonthRowField.setDisable(disabled);
-        timesheetMonthColumnField.setDisable(disabled);
-        timesheetDataRowField.setDisable(disabled);
-        timesheetDateColumnField.setDisable(disabled);
-        timesheetStartColumnField.setDisable(disabled);
-        timesheetEndColumnField.setDisable(disabled);
-        timesheetPauseColumnField.setDisable(disabled);
-        timesheetTaskColumnField.setDisable(disabled);
         timesheetTaskSeparatorField.setDisable(disabled);
-        timesheetEvaluateFormulasCheck.setDisable(disabled);
         templateBrowseButton.setDisable(disabled);
     }
 
@@ -547,58 +415,12 @@ public class ManagementDialog {
         }
     }
 
-    private void commitTimesheetRounding() {
-        commitTimesheetField(timesheetRoundingField, Customer::getTimesheetRounding, Customer::setTimesheetRounding);
-    }
-
     private void commitTimesheetSheetNo() {
         commitTimesheetField(timesheetSheetNoField, Customer::getTimesheetSheetNo, Customer::setTimesheetSheetNo);
     }
 
-    private void commitTimesheetMonthRow() {
-        commitTimesheetField(timesheetMonthRowField, Customer::getTimesheetMonthRow, Customer::setTimesheetMonthRow);
-    }
-
-    private void commitTimesheetMonthColumn() {
-        commitTimesheetField(timesheetMonthColumnField, Customer::getTimesheetMonthColumn, Customer::setTimesheetMonthColumn);
-    }
-
-    private void commitTimesheetDataRow() {
-        commitTimesheetField(timesheetDataRowField, Customer::getTimesheetDataRow, Customer::setTimesheetDataRow);
-    }
-
-    private void commitTimesheetDateColumn() {
-        commitTimesheetField(timesheetDateColumnField, Customer::getTimesheetDateColumn, Customer::setTimesheetDateColumn);
-    }
-
-    private void commitTimesheetStartColumn() {
-        commitTimesheetField(timesheetStartColumnField, Customer::getTimesheetStartColumn, Customer::setTimesheetStartColumn);
-    }
-
-    private void commitTimesheetEndColumn() {
-        commitTimesheetField(timesheetEndColumnField, Customer::getTimesheetEndColumn, Customer::setTimesheetEndColumn);
-    }
-
-    private void commitTimesheetPauseColumn() {
-        commitTimesheetField(timesheetPauseColumnField, Customer::getTimesheetPauseColumn, Customer::setTimesheetPauseColumn);
-    }
-
-    private void commitTimesheetTaskColumn() {
-        commitTimesheetField(timesheetTaskColumnField, Customer::getTimesheetTaskColumn, Customer::setTimesheetTaskColumn);
-    }
-
     private void commitTimesheetTaskSeparator() {
         commitTimesheetField(timesheetTaskSeparatorField, Customer::getTimesheetTaskSeparator, Customer::setTimesheetTaskSeparator);
-    }
-
-    private void commitTimesheetEvaluateFormulas() {
-        if (updatingDetails || detailsCustomer == null) {
-            return;
-        }
-        String value = Boolean.toString(timesheetEvaluateFormulasCheck.isSelected());
-        if (!value.equals(safeText(detailsCustomer.getTimesheetEvaluateFormulas()))) {
-            detailsCustomer.setTimesheetEvaluateFormulas(value);
-        }
     }
 
     private void commitTimesheetField(
@@ -620,18 +442,21 @@ public class ManagementDialog {
         commitCustomerAddress();
         commitCustomerTemplatePath();
         commitTimesheetNameSuggestion();
-        commitTimesheetRounding();
         commitTimesheetSheetNo();
-        commitTimesheetMonthRow();
-        commitTimesheetMonthColumn();
-        commitTimesheetDataRow();
-        commitTimesheetDateColumn();
-        commitTimesheetStartColumn();
-        commitTimesheetEndColumn();
-        commitTimesheetPauseColumn();
-        commitTimesheetTaskColumn();
         commitTimesheetTaskSeparator();
-        commitTimesheetEvaluateFormulas();
+    }
+
+    /** Returns an error message if any customer has a template path that does not exist, null if valid. */
+    private String validateTemplatePaths() {
+        for (Customer c : customers) {
+            String path = c.getTimesheetTemplatePath();
+            if (path != null && !path.isBlank()) {
+                if (!new File(path.trim()).exists()) {
+                    return i18n("management.template.notfound", safeText(c.getName()), path.trim());
+                }
+            }
+        }
+        return null;
     }
 
     private String normalizePath(String value) {
@@ -674,7 +499,7 @@ public class ManagementDialog {
 
     private void rebuildTree() {
         rootItem.getChildren().clear();
-        for (Customer customer : workingCopy) {
+        for (Customer customer : customers) {
             TreeItem<NodeData> customerItem = new TreeItem<>(NodeData.customer(customer));
             customerItem.setExpanded(true);
             for (Project project : customer.getProjects()) {
@@ -693,7 +518,7 @@ public class ManagementDialog {
         Optional<String> name = promptForText(i18n("management.customer.new.title"), i18n("management.customer.new.label"));
         name.ifPresent(value -> {
             Customer customer = new Customer(value);
-            workingCopy.add(customer);
+            customers.add(customer);
             sortCustomers();
             rebuildTree();
             selectCustomer(customer);
@@ -731,7 +556,8 @@ public class ManagementDialog {
             message += " " + i18n("management.delete.activities", activityCount);
         }
         if (confirmDelete(i18n("management.customer.delete.title"), message)) {
-            workingCopy.remove(customer);
+            activityCallbacks.removeActivitiesForCustomer(customer.getId());
+            customers.remove(customer);
             rebuildTree();
         }
     }
@@ -786,6 +612,7 @@ public class ManagementDialog {
             message += " " + i18n("management.delete.activities", activityCount);
         }
         if (confirmDelete(i18n("management.project.delete.title"), message)) {
+            activityCallbacks.removeActivitiesForProject(selected.customer.getId(), selected.project.getId());
             selected.customer.getProjects().remove(selected.project);
             rebuildTree();
             selectCustomer(selected.customer);
@@ -842,6 +669,7 @@ public class ManagementDialog {
             message += " " + i18n("management.delete.activities", activityCount);
         }
         if (confirmDelete(i18n("management.task.delete.title"), message)) {
+            activityCallbacks.removeActivitiesForTask(selected.customer.getId(), selected.project.getId(), selected.task.getId());
             selected.project.getTasks().remove(selected.task);
             rebuildTree();
             selectProject(selected.customer, selected.project);
@@ -957,14 +785,14 @@ public class ManagementDialog {
     }
 
     private void sortCustomers() {
-        FXCollections.sort(workingCopy, Comparator.comparing(customer -> sortKey(customer.getName())));
-        for (Customer customer : workingCopy) {
+        Collections.sort(customers, Comparator.comparing(customer -> sortKey(customer.getName())));
+        for (Customer customer : customers) {
             sortProjects(customer);
         }
     }
 
     private void sortProjects(Customer customer) {
-        FXCollections.sort(customer.getProjects(), Comparator.comparing(project -> sortKey(project.getName())));
+        Collections.sort(customer.getProjects(), Comparator.comparing(project -> sortKey(project.getName())));
         for (Project project : customer.getProjects()) {
             sortTasks(project);
         }

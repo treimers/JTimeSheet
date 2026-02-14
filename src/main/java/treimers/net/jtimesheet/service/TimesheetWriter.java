@@ -10,7 +10,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedHashSet;
@@ -23,6 +22,7 @@ import java.util.function.Function;
 
 import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.FormulaEvaluator;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -32,7 +32,12 @@ import org.apache.poi.ss.usermodel.WorkbookFactory;
 import treimers.net.jtimesheet.model.Activity;
 
 public class TimesheetWriter {
-    private static final DateTimeFormatter DEFAULT_DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+    /** Variable markers in Excel templates for layout discovery. */
+    private static final String VAR_MONTH = "$month";
+    private static final String VAR_START = "$start";
+    private static final String VAR_END = "$end";
+    private static final String VAR_PAUSE = "$pause";
+    private static final String VAR_TASK = "$task";
 
     public void writeTimesheet(
         Properties properties,
@@ -60,11 +65,11 @@ public class TimesheetWriter {
             Workbook workbook = createWorkbook(inputStream)
         ) {
             Sheet sheet = workbook.getSheetAt(config.sheetNo);
-            writeMonthCell(sheet, config, monthStart);
-            writeDayRows(sheet, config, monthStart, monthEnd, summaries);
-            if (config.evaluateFormulas) {
-                evaluateFormulas(workbook);
-            }
+            Config resolvedConfig = resolveConfig(config, sheet, properties);
+            writeMonthCell(workbook, sheet, resolvedConfig, monthStart);
+            writeDayRows(sheet, resolvedConfig, monthStart, monthEnd, summaries);
+            evaluateFormulas(workbook);
+            workbook.setForceFormulaRecalculation(true);
             try (OutputStream outputStream = Files.newOutputStream(outputPath)) {
                 workbook.write(outputStream);
             }
@@ -79,11 +84,16 @@ public class TimesheetWriter {
         }
     }
 
-    private void writeMonthCell(Sheet sheet, Config config, LocalDate monthStart) {
+    private void writeMonthCell(Workbook workbook, Sheet sheet, Config config, LocalDate monthStart) {
         Row row = getOrCreateRow(sheet, config.monthRow);
         Cell cell = getOrCreateCell(row, config.monthColumn);
+        CellStyle existingStyle = cell.getCellStyle();
         Date date = Date.from(monthStart.atStartOfDay(ZoneId.systemDefault()).toInstant());
         cell.setCellValue(date);
+        CellStyle dateStyle = workbook.createCellStyle();
+        dateStyle.cloneStyleFrom(existingStyle);
+        dateStyle.setDataFormat(workbook.getCreationHelper().createDataFormat().getFormat("dd.mm.yyyy"));
+        cell.setCellStyle(dateStyle);
     }
 
     private void writeDayRows(
@@ -97,8 +107,6 @@ public class TimesheetWriter {
         int rowIndex = 0;
         while (!date.isAfter(monthEnd)) {
             Row row = getOrCreateRow(sheet, config.dataRow + rowIndex);
-            Cell dateCell = getOrCreateCell(row, config.dateColumn);
-            dateCell.setCellValue(DEFAULT_DATE_FORMAT.format(date));
             DaySummary summary = summaries.get(date);
             if (summary != null) {
                 writeTimeCell(row, config.startColumn, summary.startTime);
@@ -106,10 +114,20 @@ public class TimesheetWriter {
                 writePauseCell(row, config.pauseColumn, summary.pauseMinutes, config.rounding);
                 Cell taskCell = getOrCreateCell(row, config.taskColumn);
                 taskCell.setCellValue(summary.tasks);
+            } else {
+                clearCell(row, config.startColumn);
+                clearCell(row, config.endColumn);
+                clearCell(row, config.pauseColumn);
+                clearCell(row, config.taskColumn);
             }
             rowIndex++;
             date = date.plusDays(1);
         }
+    }
+
+    private void clearCell(Row row, int columnIndex) {
+        Cell cell = getOrCreateCell(row, columnIndex);
+        cell.setCellType(Cell.CELL_TYPE_BLANK);
     }
 
     private void writeTimeCell(Row row, int column, LocalTime time) {
@@ -122,29 +140,126 @@ public class TimesheetWriter {
     }
 
     private void writePauseCell(Row row, int column, long pauseMinutes, double rounding) {
+        double value;
         if (pauseMinutes <= 0) {
-            return;
+            value = 0.0; // 0:00
+        } else {
+            double hours = pauseMinutes / 60.0;
+            if (rounding > 0) {
+                hours = Math.round(hours * rounding) / rounding;
+            }
+            value = hours / 24.0;
         }
-        double hours = pauseMinutes / 60.0;
-        if (rounding > 0) {
-            hours = Math.round(hours * rounding) / rounding;
-        }
-        double value = hours / 24.0;
         Cell cell = getOrCreateCell(row, column);
         cell.setCellValue(value);
     }
 
     private void evaluateFormulas(Workbook workbook) {
         FormulaEvaluator evaluator = workbook.getCreationHelper().createFormulaEvaluator();
-        for (int sheetNum = 0; sheetNum < workbook.getNumberOfSheets(); sheetNum++) {
-            Sheet sheet = workbook.getSheetAt(sheetNum);
-            for (Row row : sheet) {
-                for (Cell cell : row) {
-                    if (cell.getCellType() == Cell.CELL_TYPE_FORMULA) {
-                        evaluator.evaluateFormulaCell(cell);
-                    }
+        evaluator.clearAllCachedResultValues();
+        evaluator.evaluateAll();
+    }
+
+    /** Discovers layout from template variables ($month, $start, $end, $pause, $task). */
+    private Config resolveConfig(Config config, Sheet sheet, Properties properties) {
+        DiscoveredLayout discovered = discoverLayout(sheet);
+        if (discovered != null && discovered.isComplete()) {
+            return config.mergeWith(discovered);
+        }
+        throw new IllegalArgumentException(
+            "Template does not contain required variables ($month, $start, $end, $pause, $task). " +
+            "Add these markers to the Excel template.");
+    }
+
+    private DiscoveredLayout discoverLayout(Sheet sheet) {
+        Integer monthRow = null;
+        Integer monthCol = null;
+        Integer dataRow = null;
+        Integer startCol = null;
+        Integer endCol = null;
+        Integer pauseCol = null;
+        Integer taskCol = null;
+
+        int lastRow = sheet.getLastRowNum();
+        for (int r = 0; r <= lastRow; r++) {
+            Row row = sheet.getRow(r);
+            if (row == null) continue;
+            int rowIdx = row.getRowNum();
+            short lastCell = row.getLastCellNum();
+            if (lastCell < 0) continue;
+            for (short c = 0; c < lastCell; c++) {
+                Cell cell = row.getCell(c);
+                if (cell == null) continue;
+                String value = getCellStringValue(cell);
+                if (value == null || value.isEmpty()) continue;
+                if (value.contains(VAR_MONTH)) {
+                    monthRow = rowIdx;
+                    monthCol = cell.getColumnIndex();
+                }
+                if (value.contains(VAR_START)) {
+                    dataRow = dataRow == null ? rowIdx : Math.min(dataRow, rowIdx);
+                    startCol = cell.getColumnIndex();
+                }
+                if (value.contains(VAR_END)) {
+                    dataRow = dataRow == null ? rowIdx : Math.min(dataRow, rowIdx);
+                    endCol = cell.getColumnIndex();
+                }
+                if (value.contains(VAR_PAUSE)) {
+                    dataRow = dataRow == null ? rowIdx : Math.min(dataRow, rowIdx);
+                    pauseCol = cell.getColumnIndex();
+                }
+                if (value.contains(VAR_TASK)) {
+                    dataRow = dataRow == null ? rowIdx : Math.min(dataRow, rowIdx);
+                    taskCol = cell.getColumnIndex();
                 }
             }
+        }
+
+        if (monthRow == null || dataRow == null || startCol == null
+                || endCol == null || pauseCol == null || taskCol == null) {
+            return null;
+        }
+        return new DiscoveredLayout(monthRow, monthCol, dataRow, startCol, endCol, pauseCol, taskCol);
+    }
+
+    private String getCellStringValue(Cell cell) {
+        int type = cell.getCellType();
+        if (type == Cell.CELL_TYPE_STRING) {
+            return cell.getStringCellValue();
+        }
+        if (type == Cell.CELL_TYPE_FORMULA) {
+            try {
+                String formula = cell.getCellFormula();
+                if (formula != null && !formula.isEmpty()) {
+                    return formula;
+                }
+                int formulaResultType = cell.getCachedFormulaResultType();
+                if (formulaResultType == Cell.CELL_TYPE_STRING) {
+                    return cell.getStringCellValue();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static class DiscoveredLayout {
+        final int monthRow, monthColumn, dataRow;
+        final int startColumn, endColumn, pauseColumn, taskColumn;
+
+        DiscoveredLayout(int monthRow, int monthColumn, int dataRow,
+                         int startColumn, int endColumn, int pauseColumn, int taskColumn) {
+            this.monthRow = monthRow;
+            this.monthColumn = monthColumn;
+            this.dataRow = dataRow;
+            this.startColumn = startColumn;
+            this.endColumn = endColumn;
+            this.pauseColumn = pauseColumn;
+            this.taskColumn = taskColumn;
+        }
+
+        boolean isComplete() {
+            return true;
         }
     }
 
@@ -262,31 +377,44 @@ public class TimesheetWriter {
 
     private static class Config {
         private final int sheetNo;
-        private final int monthRow;
-        private final int monthColumn;
-        private final int dataRow;
-        private final int dateColumn;
-        private final int startColumn;
-        private final int endColumn;
-        private final int pauseColumn;
-        private final int taskColumn;
+        private final Integer monthRow;
+        private final Integer monthColumn;
+        private final Integer dataRow;
+        private final Integer startColumn;
+        private final Integer endColumn;
+        private final Integer pauseColumn;
+        private final Integer taskColumn;
         private final double rounding;
-        private final boolean evaluateFormulas;
         private final String taskSeparator;
 
         private Config(Properties properties) {
             sheetNo = getRequiredInt(properties, "target.sheetno");
-            monthRow = getRequiredInt(properties, "target.month.row");
-            monthColumn = getRequiredInt(properties, "target.month.column");
-            dataRow = getRequiredInt(properties, "target.data.row");
-            dateColumn = getRequiredInt(properties, "target.date.column");
-            startColumn = getRequiredInt(properties, "target.start.column");
-            endColumn = getRequiredInt(properties, "target.end.column");
-            pauseColumn = getRequiredInt(properties, "target.pause.column");
-            taskColumn = getRequiredInt(properties, "target.task.column");
+            monthRow = null;
+            monthColumn = null;
+            dataRow = null;
+            startColumn = null;
+            endColumn = null;
+            pauseColumn = null;
+            taskColumn = null;
             rounding = getDouble(properties, "rounding", 0.0);
-            evaluateFormulas = getBoolean(properties, "target.evaluate.formulas", true);
             taskSeparator = getString(properties, "target.task.separator", ", ");
+        }
+
+        private Config(int sheetNo, DiscoveredLayout layout, double rounding, String taskSeparator) {
+            this.sheetNo = sheetNo;
+            this.monthRow = layout.monthRow;
+            this.monthColumn = layout.monthColumn;
+            this.dataRow = layout.dataRow;
+            this.startColumn = layout.startColumn;
+            this.endColumn = layout.endColumn;
+            this.pauseColumn = layout.pauseColumn;
+            this.taskColumn = layout.taskColumn;
+            this.rounding = rounding;
+            this.taskSeparator = taskSeparator;
+        }
+
+        Config mergeWith(DiscoveredLayout discovered) {
+            return new Config(sheetNo, discovered, rounding, taskSeparator);
         }
 
         private static int getRequiredInt(Properties properties, String key) {
@@ -311,14 +439,6 @@ public class TimesheetWriter {
             } catch (NumberFormatException exception) {
                 return fallback;
             }
-        }
-
-        private static boolean getBoolean(Properties properties, String key, boolean fallback) {
-            String value = properties.getProperty(key);
-            if (value == null || value.trim().isEmpty()) {
-                return fallback;
-            }
-            return Boolean.parseBoolean(value.trim());
         }
 
         private static String getString(Properties properties, String key, String fallback) {

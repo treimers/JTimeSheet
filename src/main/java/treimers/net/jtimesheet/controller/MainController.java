@@ -18,6 +18,7 @@ import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -1822,9 +1823,9 @@ public class MainController {
             showInfo(i18n("timesheet.customer.missing.properties", selectedCustomer.getName()));
             return;
         }
-        Path templatePath = resolveCustomerFile(selectedCustomer.getTimesheetTemplatePath());
+        Path templatePath = resolveTemplatePath(selectedCustomer.getTimesheetTemplatePath());
         if (templatePath == null) {
-            showInfo(i18n("timesheet.customer.missing.template", selectedCustomer.getName()));
+            showInfo(i18n("timesheet.template.notfound"));
             return;
         }
         File outputFile = chooseTimesheetOutputFile(selectedCustomer, templatePath);
@@ -1854,31 +1855,16 @@ public class MainController {
 
     private Properties buildTimesheetProperties(Customer customer) {
         Properties properties = new Properties();
-        putIfNotBlank(properties, "rounding", customer.getTimesheetRounding());
+        int timeGridMinutes = AppSettings.normalizeTimeGridMinutes(settings.getTimeGridMinutes());
+        double rounding = timeGridMinutes > 0 ? 60.0 / timeGridMinutes : 4.0;
+        properties.setProperty("rounding", String.valueOf(rounding));
         putIfNotBlank(properties, "target.sheetno", customer.getTimesheetSheetNo());
-        putIfNotBlank(properties, "target.month.row", customer.getTimesheetMonthRow());
-        putIfNotBlank(properties, "target.month.column", customer.getTimesheetMonthColumn());
-        putIfNotBlank(properties, "target.data.row", customer.getTimesheetDataRow());
-        putIfNotBlank(properties, "target.date.column", customer.getTimesheetDateColumn());
-        putIfNotBlank(properties, "target.start.column", customer.getTimesheetStartColumn());
-        putIfNotBlank(properties, "target.end.column", customer.getTimesheetEndColumn());
-        putIfNotBlank(properties, "target.pause.column", customer.getTimesheetPauseColumn());
-        putIfNotBlank(properties, "target.task.column", customer.getTimesheetTaskColumn());
-        putIfNotBlank(properties, "target.evaluate.formulas", customer.getTimesheetEvaluateFormulas());
         putIfNotBlank(properties, "target.task.separator", customer.getTimesheetTaskSeparator());
         return properties;
     }
 
     private boolean hasRequiredTimesheetConfig(Customer customer) {
-        return hasText(customer.getTimesheetSheetNo())
-            && hasText(customer.getTimesheetMonthRow())
-            && hasText(customer.getTimesheetMonthColumn())
-            && hasText(customer.getTimesheetDataRow())
-            && hasText(customer.getTimesheetDateColumn())
-            && hasText(customer.getTimesheetStartColumn())
-            && hasText(customer.getTimesheetEndColumn())
-            && hasText(customer.getTimesheetPauseColumn())
-            && hasText(customer.getTimesheetTaskColumn());
+        return hasText(customer.getTimesheetSheetNo());
     }
 
     private boolean hasText(String value) {
@@ -1899,21 +1885,62 @@ public class MainController {
     private File chooseTimesheetOutputFile(Customer customer, Path templatePath) {
         FileChooser chooser = new FileChooser();
         chooser.setTitle(i18n("timesheet.output.title"));
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
-            i18n("timesheet.output.filter"),
-            "*.xls",
-            "*.xlsx"
-        ));
-        applyInitialFile(chooser, templatePath != null ? templatePath.toString() : null);
         String extension = resolveTemplateExtension(templatePath);
-        String suggestion = customer != null ? customer.getTimesheetFilenameSuggestion() : null;
-        if (suggestion != null && !suggestion.isBlank()) {
-            chooser.setInitialFileName(suggestion.trim() + extension);
-        } else if (customer != null && customer.getName() != null && !customer.getName().isBlank()) {
-            chooser.setInitialFileName(customer.getName().trim() + "-timesheet" + extension);
+        FileChooser.ExtensionFilter filter = new FileChooser.ExtensionFilter(
+            i18n("timesheet.output.filter"),
+            "*" + extension
+        );
+        chooser.getExtensionFilters().add(filter);
+        chooser.setSelectedExtensionFilter(filter);
+        if (templatePath != null) {
+            File f = templatePath.toFile();
+            File dir = f.isDirectory() ? f : f.getParentFile();
+            if (dir != null && dir.exists()) {
+                chooser.setInitialDirectory(dir);
+            }
         }
+        String baseName = baseNameForTimesheetOutput(customer, extension);
+        String fileName = baseName != null ? baseName + extension : "timesheet" + extension;
+        chooser.setInitialFileName(fileName);
         File file = chooser.showSaveDialog(primaryStage);
+        if (file != null && !file.getName().toLowerCase().endsWith(extension.toLowerCase())) {
+            String name = file.getName();
+            if (name.toLowerCase().endsWith(".xls")) {
+                name = name.substring(0, name.length() - 4);
+            } else if (name.toLowerCase().endsWith(".xlsx")) {
+                name = name.substring(0, name.length() - 5);
+            }
+            file = new File(file.getParent(), name + (name.isEmpty() ? "timesheet" : "") + extension);
+        }
         return file;
+    }
+
+    /** Base name for timesheet output (no extension). Strips any .xls/.xlsx from suggestion so the current template extension is used. */
+    private String baseNameForTimesheetOutput(Customer customer, String extension) {
+        String raw = null;
+        if (customer != null) {
+            String suggestion = customer.getTimesheetFilenameSuggestion();
+            if (suggestion != null && !suggestion.isBlank()) {
+                raw = suggestion.trim();
+            } else if (customer.getName() != null && !customer.getName().isBlank()) {
+                raw = customer.getName().trim() + "-timesheet";
+            }
+        }
+        if (raw == null || raw.isEmpty()) {
+            return null;
+        }
+        // Use only the file name part if the suggestion is a path
+        if (raw.contains(File.separator) || raw.contains("/")) {
+            raw = Paths.get(raw.replace('/', File.separatorChar)).getFileName().toString();
+        }
+        String lower = raw.toLowerCase();
+        if (lower.endsWith(".xlsx")) {
+            return raw.substring(0, raw.length() - 5);
+        }
+        if (lower.endsWith(".xls")) {
+            return raw.substring(0, raw.length() - 4);
+        }
+        return raw;
     }
 
     private String resolveTemplateExtension(Path templatePath) {
@@ -1930,26 +1957,13 @@ public class MainController {
         return ".xlsx";
     }
 
-    private Path resolveCustomerFile(String path) {
+    /** Returns the path if the file exists, null otherwise. No fallback to other extensions. */
+    private Path resolveTemplatePath(String path) {
         if (path == null || path.isBlank()) {
             return null;
         }
         Path resolved = Paths.get(path.trim());
         return Files.exists(resolved) ? resolved : null;
-    }
-
-    private void applyInitialFile(FileChooser chooser, String path) {
-        if (path == null || path.isBlank()) {
-            return;
-        }
-        File file = new File(path);
-        File directory = file.isDirectory() ? file : file.getParentFile();
-        if (directory != null && directory.exists()) {
-            chooser.setInitialDirectory(directory);
-        }
-        if (file.isFile()) {
-            chooser.setInitialFileName(file.getName());
-        }
     }
 
     private List<Activity> parseCsvLines(List<String> lines) {
@@ -2129,6 +2143,7 @@ public class MainController {
         ManagementDialog dialog = new ManagementDialog(
             customers,
             this::saveData,
+            this::loadData,
             new ActivityCallbacks() {
                 @Override
                 public int countActivitiesForCustomer(String customerId) {
@@ -2597,15 +2612,6 @@ public class MainController {
                         customerData.timesheetFilenameSuggestion,
                         customerData.timesheetRounding,
                         customerData.timesheetSheetNo,
-                        customerData.timesheetMonthRow,
-                        customerData.timesheetMonthColumn,
-                        customerData.timesheetDataRow,
-                        customerData.timesheetDateColumn,
-                        customerData.timesheetStartColumn,
-                        customerData.timesheetEndColumn,
-                        customerData.timesheetPauseColumn,
-                        customerData.timesheetTaskColumn,
-                        customerData.timesheetEvaluateFormulas,
                         customerData.timesheetTaskSeparator
                     );
                     if (customerData.projects != null) {
@@ -2664,15 +2670,6 @@ public class MainController {
             customerData.timesheetFilenameSuggestion = customer.getTimesheetFilenameSuggestion();
             customerData.timesheetRounding = customer.getTimesheetRounding();
             customerData.timesheetSheetNo = customer.getTimesheetSheetNo();
-            customerData.timesheetMonthRow = customer.getTimesheetMonthRow();
-            customerData.timesheetMonthColumn = customer.getTimesheetMonthColumn();
-            customerData.timesheetDataRow = customer.getTimesheetDataRow();
-            customerData.timesheetDateColumn = customer.getTimesheetDateColumn();
-            customerData.timesheetStartColumn = customer.getTimesheetStartColumn();
-            customerData.timesheetEndColumn = customer.getTimesheetEndColumn();
-            customerData.timesheetPauseColumn = customer.getTimesheetPauseColumn();
-            customerData.timesheetTaskColumn = customer.getTimesheetTaskColumn();
-            customerData.timesheetEvaluateFormulas = customer.getTimesheetEvaluateFormulas();
             customerData.timesheetTaskSeparator = customer.getTimesheetTaskSeparator();
             customerData.projects = new ArrayList<>();
             for (Project project : customer.getProjects()) {
@@ -3094,7 +3091,7 @@ public class MainController {
     }
 
     private void sortProjects(Customer customer) {
-        FXCollections.sort(customer.getProjects(), Comparator.comparing(project -> sortKey(project.getName())));
+        Collections.sort(customer.getProjects(), Comparator.comparing(project -> sortKey(project.getName())));
         for (Project project : customer.getProjects()) {
             sortTasks(project);
         }

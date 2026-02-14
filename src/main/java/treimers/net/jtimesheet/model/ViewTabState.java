@@ -12,9 +12,9 @@ import javafx.collections.ObservableList;
  */
 public class ViewTabState {
     private final ViewLevel level;
-    private final Customer fixedCustomer;
-    private final Project fixedProject;
-    private final Task fixedTask;
+    private Customer fixedCustomer;
+    private Project fixedProject;
+    private Task fixedTask;
 
     private final ObservableList<String> selectedTaskIds = FXCollections.observableArrayList();
     private LocalDate fromDate;
@@ -36,12 +36,24 @@ public class ViewTabState {
         return fixedCustomer;
     }
 
+    public void setFixedCustomer(Customer fixedCustomer) {
+        this.fixedCustomer = fixedCustomer;
+    }
+
     public Project getFixedProject() {
         return fixedProject;
     }
 
+    public void setFixedProject(Project fixedProject) {
+        this.fixedProject = fixedProject;
+    }
+
     public Task getFixedTask() {
         return fixedTask;
+    }
+
+    public void setFixedTask(Task fixedTask) {
+        this.fixedTask = fixedTask;
     }
 
     public ObservableList<String> getSelectedTaskIds() {

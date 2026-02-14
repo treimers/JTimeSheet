@@ -1,37 +1,26 @@
 package treimers.net.jtimesheet.model;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
-import javafx.beans.property.SimpleStringProperty;
-import javafx.beans.property.StringProperty;
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
 
 public class Customer {
     private final String id;
-    private final StringProperty name;
-    private final StringProperty address;
-    private final StringProperty timesheetTemplatePath;
-    private final StringProperty timesheetFilenameSuggestion;
-    private final StringProperty timesheetRounding;
-    private final StringProperty timesheetSheetNo;
-    private final StringProperty timesheetMonthRow;
-    private final StringProperty timesheetMonthColumn;
-    private final StringProperty timesheetDataRow;
-    private final StringProperty timesheetDateColumn;
-    private final StringProperty timesheetStartColumn;
-    private final StringProperty timesheetEndColumn;
-    private final StringProperty timesheetPauseColumn;
-    private final StringProperty timesheetTaskColumn;
-    private final StringProperty timesheetEvaluateFormulas;
-    private final StringProperty timesheetTaskSeparator;
-    private final ObservableList<Project> projects = FXCollections.observableArrayList();
+    private String name;
+    private String address;
+    private String timesheetTemplatePath;
+    private String timesheetFilenameSuggestion;
+    private String timesheetRounding;
+    private String timesheetSheetNo;
+    private String timesheetTaskSeparator;
+    private final List<Project> projects = new ArrayList<>();
 
     public Customer(String name) {
-        this(UUID.randomUUID().toString(), name, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ",");
+        this(UUID.randomUUID().toString(), name, "", "", "", "", "", ",");
     }
 
     public Customer(String id, String name) {
-        this(id, name, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ",");
+        this(id, name, "", "", "", "", "", ",");
     }
 
     public Customer(
@@ -42,34 +31,16 @@ public class Customer {
         String timesheetFilenameSuggestion,
         String timesheetRounding,
         String timesheetSheetNo,
-        String timesheetMonthRow,
-        String timesheetMonthColumn,
-        String timesheetDataRow,
-        String timesheetDateColumn,
-        String timesheetStartColumn,
-        String timesheetEndColumn,
-        String timesheetPauseColumn,
-        String timesheetTaskColumn,
-        String timesheetEvaluateFormulas,
         String timesheetTaskSeparator
     ) {
         this.id = id;
-        this.name = new SimpleStringProperty(safeValue(name));
-        this.address = new SimpleStringProperty(safeValue(address));
-        this.timesheetTemplatePath = new SimpleStringProperty(safeValue(timesheetTemplatePath));
-        this.timesheetFilenameSuggestion = new SimpleStringProperty(safeValue(timesheetFilenameSuggestion));
-        this.timesheetRounding = new SimpleStringProperty(safeValue(timesheetRounding));
-        this.timesheetSheetNo = new SimpleStringProperty(safeValue(timesheetSheetNo));
-        this.timesheetMonthRow = new SimpleStringProperty(safeValue(timesheetMonthRow));
-        this.timesheetMonthColumn = new SimpleStringProperty(safeValue(timesheetMonthColumn));
-        this.timesheetDataRow = new SimpleStringProperty(safeValue(timesheetDataRow));
-        this.timesheetDateColumn = new SimpleStringProperty(safeValue(timesheetDateColumn));
-        this.timesheetStartColumn = new SimpleStringProperty(safeValue(timesheetStartColumn));
-        this.timesheetEndColumn = new SimpleStringProperty(safeValue(timesheetEndColumn));
-        this.timesheetPauseColumn = new SimpleStringProperty(safeValue(timesheetPauseColumn));
-        this.timesheetTaskColumn = new SimpleStringProperty(safeValue(timesheetTaskColumn));
-        this.timesheetEvaluateFormulas = new SimpleStringProperty(safeValue(timesheetEvaluateFormulas));
-        this.timesheetTaskSeparator = new SimpleStringProperty(safeValue(timesheetTaskSeparator));
+        this.name = safeValue(name);
+        this.address = safeValue(address);
+        this.timesheetTemplatePath = safeValue(timesheetTemplatePath);
+        this.timesheetFilenameSuggestion = safeValue(timesheetFilenameSuggestion);
+        this.timesheetRounding = safeValue(timesheetRounding);
+        this.timesheetSheetNo = safeValue(timesheetSheetNo);
+        this.timesheetTaskSeparator = safeValue(timesheetTaskSeparator);
     }
 
     public String getId() {
@@ -77,138 +48,66 @@ public class Customer {
     }
 
     public String getName() {
-        return name.get();
+        return name;
     }
 
     public void setName(String value) {
-        name.set(value);
+        this.name = value != null ? value : "";
     }
 
     public String getAddress() {
-        return address.get();
+        return address;
     }
 
     public void setAddress(String value) {
-        address.set(value);
+        this.address = value != null ? value : "";
     }
 
     public String getTimesheetTemplatePath() {
-        return timesheetTemplatePath.get();
+        return timesheetTemplatePath;
     }
 
     public void setTimesheetTemplatePath(String value) {
-        timesheetTemplatePath.set(value);
+        this.timesheetTemplatePath = value != null ? value : "";
     }
 
     public String getTimesheetFilenameSuggestion() {
-        return timesheetFilenameSuggestion.get();
+        return timesheetFilenameSuggestion;
     }
 
     public void setTimesheetFilenameSuggestion(String value) {
-        timesheetFilenameSuggestion.set(value);
+        this.timesheetFilenameSuggestion = value != null ? value : "";
     }
 
     public String getTimesheetRounding() {
-        return timesheetRounding.get();
+        return timesheetRounding;
     }
 
     public void setTimesheetRounding(String value) {
-        timesheetRounding.set(value);
+        this.timesheetRounding = value != null ? value : "";
     }
 
     public String getTimesheetSheetNo() {
-        return timesheetSheetNo.get();
+        return timesheetSheetNo;
     }
 
     public void setTimesheetSheetNo(String value) {
-        timesheetSheetNo.set(value);
-    }
-
-    public String getTimesheetMonthRow() {
-        return timesheetMonthRow.get();
-    }
-
-    public void setTimesheetMonthRow(String value) {
-        timesheetMonthRow.set(value);
-    }
-
-    public String getTimesheetMonthColumn() {
-        return timesheetMonthColumn.get();
-    }
-
-    public void setTimesheetMonthColumn(String value) {
-        timesheetMonthColumn.set(value);
-    }
-
-    public String getTimesheetDataRow() {
-        return timesheetDataRow.get();
-    }
-
-    public void setTimesheetDataRow(String value) {
-        timesheetDataRow.set(value);
-    }
-
-    public String getTimesheetDateColumn() {
-        return timesheetDateColumn.get();
-    }
-
-    public void setTimesheetDateColumn(String value) {
-        timesheetDateColumn.set(value);
-    }
-
-    public String getTimesheetStartColumn() {
-        return timesheetStartColumn.get();
-    }
-
-    public void setTimesheetStartColumn(String value) {
-        timesheetStartColumn.set(value);
-    }
-
-    public String getTimesheetEndColumn() {
-        return timesheetEndColumn.get();
-    }
-
-    public void setTimesheetEndColumn(String value) {
-        timesheetEndColumn.set(value);
-    }
-
-    public String getTimesheetPauseColumn() {
-        return timesheetPauseColumn.get();
-    }
-
-    public void setTimesheetPauseColumn(String value) {
-        timesheetPauseColumn.set(value);
-    }
-
-    public String getTimesheetTaskColumn() {
-        return timesheetTaskColumn.get();
-    }
-
-    public void setTimesheetTaskColumn(String value) {
-        timesheetTaskColumn.set(value);
-    }
-
-    public String getTimesheetEvaluateFormulas() {
-        return timesheetEvaluateFormulas.get();
-    }
-
-    public void setTimesheetEvaluateFormulas(String value) {
-        timesheetEvaluateFormulas.set(value);
+        this.timesheetSheetNo = value != null ? value : "";
     }
 
     public String getTimesheetTaskSeparator() {
-        return timesheetTaskSeparator.get();
+        return timesheetTaskSeparator;
     }
 
     public void setTimesheetTaskSeparator(String value) {
-        timesheetTaskSeparator.set(value);
+        this.timesheetTaskSeparator = value != null ? value : "";
     }
 
-    public ObservableList<Project> getProjects() {
+    public List<Project> getProjects() {
         return projects;
     }
 
-    private String safeValue(String value) {
+    private static String safeValue(String value) {
         return value != null ? value : "";
     }
 
