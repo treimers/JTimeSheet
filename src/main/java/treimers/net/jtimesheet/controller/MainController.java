@@ -18,6 +18,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
+import java.time.temporal.WeekFields;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -92,7 +93,6 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
-import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
@@ -206,7 +206,7 @@ public class MainController {
     private TableColumn<Activity, String> dailyTotalColumn;
 
     private TabPane viewTabPane;
-    private StackPane tableOrCalendarStack;
+    private VBox activityPanel;
     private Node calendarViewNode;
     private static final int CALENDAR_TAB_INDEX = 1;
     private CalendarSource calendarSource;
@@ -250,22 +250,19 @@ public class MainController {
         activitiesHeaderLabel = sectionHeader(i18n("section.activities"));
         HBox activityHeader = new HBox(10, activitiesHeaderLabel, new Region(), totalHoursLabel);
         HBox.setHgrow(activityHeader.getChildren().get(1), Priority.ALWAYS);
-
         viewTabPane = new TabPane();
         Tab mainTab = new Tab(i18n("view.main.tab"));
         mainTab.setClosable(false);
-        mainTab.setContent(createFilterPanel());
+        VBox mainTabContent = new VBox(10, activityHeader, createFilterPanel(), activityTable);
+        VBox.setVgrow(activityTable, Priority.ALWAYS);
+        mainTab.setContent(mainTabContent);
         viewTabPane.getTabs().add(mainTab);
 
+        calendarViewNode = createCalendarContent();
         Tab calendarTab = new Tab(i18n("view.tab.calendar"));
         calendarTab.setClosable(false);
-        calendarTab.setContent(new Region());
+        calendarTab.setContent(calendarViewNode);
         viewTabPane.getTabs().add(calendarTab);
-
-        calendarViewNode = createCalendarContent();
-        tableOrCalendarStack = new StackPane(activityTable, calendarViewNode);
-        calendarViewNode.setVisible(false);
-        VBox.setVgrow(tableOrCalendarStack, Priority.ALWAYS);
 
         viewTabPane.getSelectionModel().selectedIndexProperty().addListener((obs, oldIdx, newIdx) -> {
             updateTableOrCalendarVisibility();
@@ -289,9 +286,9 @@ public class MainController {
             }
         });
 
-        VBox activityPanel = new VBox(10, activityHeader, viewTabPane, tableOrCalendarStack);
+        activityPanel = new VBox(10, viewTabPane);
         activityPanel.setPadding(new Insets(12));
-        VBox.setVgrow(tableOrCalendarStack, Priority.ALWAYS);
+        VBox.setVgrow(viewTabPane, Priority.ALWAYS);
 
         MainView view = new MainView(menuBar, toolBar, activityPanel);
 
@@ -669,18 +666,7 @@ public class MainController {
     }
 
     private void updateTableOrCalendarVisibility() {
-        if (tableOrCalendarStack == null || calendarViewNode == null) {
-            return;
-        }
-        int idx = viewTabPane != null ? viewTabPane.getSelectionModel().getSelectedIndex() : 0;
-        boolean showCalendar = (idx == CALENDAR_TAB_INDEX);
-        calendarViewNode.setVisible(showCalendar);
-        activityTable.setVisible(!showCalendar);
-        if (showCalendar) {
-            tableOrCalendarStack.getChildren().get(1).toFront();
-        } else {
-            tableOrCalendarStack.getChildren().get(0).toFront();
-        }
+        // Tab content (main = header+filter+table, calendar = calendar) is switched by TabPane; nothing else to do here.
     }
 
     private Node createCalendarContent() {
@@ -690,6 +676,7 @@ public class MainController {
         calendarView.getCalendarSources().add(calendarSource);
         calendarView.setShowAddCalendarButton(false);
         calendarView.setRequestedTime(LocalTime.now());
+        calendarView.setWeekFields(WeekFields.of(currentLocale));
         restoreCalendarPreferences(calendarView);
         calendarView.selectedPageProperty().addListener((obs, oldPage, newPage) -> saveCalendarPagePreference(newPage));
         Thread updateTimeThread = new Thread("Calendar: Update Time") {
@@ -2708,6 +2695,7 @@ public class MainController {
                 activityTable.refresh();
                 activityTable.getSelectionModel().select(lastActivity);
             }
+            syncAllCalendarsFromActivities();
         } else {
             activities.add(activity);
             lastActivity = activity;
@@ -2774,6 +2762,7 @@ public class MainController {
                 activityTable.refresh();
                 saveData();
                 applyFilters();
+                syncAllCalendarsFromActivities();
                 return;
             }
             reopenWith = value;
@@ -3360,6 +3349,7 @@ public class MainController {
             currentLocale = Locale.ENGLISH;
             messages = ResourceBundle.getBundle("i18n.messages", Locale.ENGLISH);
         }
+        Locale.setDefault(currentLocale);
     }
 
     private void checkBundleCompleteness() {
