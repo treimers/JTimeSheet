@@ -181,6 +181,7 @@ public class MainController {
     private DatePicker fromFilter;
     private DatePicker toFilter;
     private ComboBox<PresetRange> presetFilter;
+    private boolean applyingPreset;
     private Label customerFilterLabel;
     private Label projectFilterLabel;
     private Label tasksFilterLabel;
@@ -953,20 +954,29 @@ public class MainController {
         });
 
         fromFilter.valueProperty().addListener((obs, oldValue, newValue) -> {
-            presetFilter.getSelectionModel().select(PresetRange.CUSTOM);
+            if (!applyingPreset) {
+                presetFilter.getSelectionModel().select(PresetRange.CUSTOM);
+            }
             applyFilters();
             saveFilterPreferences();
         });
         toFilter.valueProperty().addListener((obs, oldValue, newValue) -> {
-            presetFilter.getSelectionModel().select(PresetRange.CUSTOM);
+            if (!applyingPreset) {
+                presetFilter.getSelectionModel().select(PresetRange.CUSTOM);
+            }
             applyFilters();
             saveFilterPreferences();
         });
 
         presetFilter.valueProperty().addListener((obs, oldValue, newValue) -> {
-            applyPreset(newValue);
-            applyFilters();
-            saveFilterPreferences();
+            applyingPreset = true;
+            try {
+                applyPreset(newValue);
+                applyFilters();
+                saveFilterPreferences();
+            } finally {
+                applyingPreset = false;
+            }
         });
 
         updateProjectFilter(null);
@@ -1062,25 +1072,32 @@ public class MainController {
             saveViewTabsPreferences();
         });
 
+        final boolean[] applyingViewPreset = { false };
         viewFrom.valueProperty().addListener((obs, o, n) -> {
             state.setFromDate(n);
-            viewPreset.getSelectionModel().select(PresetRange.CUSTOM);
-            state.setPresetKey(PresetRange.CUSTOM.name());
+            if (!applyingViewPreset[0]) {
+                viewPreset.getSelectionModel().select(PresetRange.CUSTOM);
+                state.setPresetKey(PresetRange.CUSTOM.name());
+            }
             applyFilters();
             saveViewTabsPreferences();
         });
         viewTo.valueProperty().addListener((obs, o, n) -> {
             state.setToDate(n);
-            viewPreset.getSelectionModel().select(PresetRange.CUSTOM);
-            state.setPresetKey(PresetRange.CUSTOM.name());
+            if (!applyingViewPreset[0]) {
+                viewPreset.getSelectionModel().select(PresetRange.CUSTOM);
+                state.setPresetKey(PresetRange.CUSTOM.name());
+            }
             applyFilters();
             saveViewTabsPreferences();
         });
         viewPreset.valueProperty().addListener((obs, o, n) -> {
             if (n == null) return;
             state.setPresetKey(n.name());
-            LocalDate today = LocalDate.now();
-            switch (n) {
+            applyingViewPreset[0] = true;
+            try {
+                LocalDate today = LocalDate.now();
+                switch (n) {
                 case TODAY -> { viewFrom.setValue(today); viewTo.setValue(today); state.setFromDate(today); state.setToDate(today); }
                 case YESTERDAY -> {
                     LocalDate y = today.minusDays(1);
@@ -1107,9 +1124,12 @@ public class MainController {
                     viewFrom.setValue(start); viewTo.setValue(end); state.setFromDate(start); state.setToDate(end);
                 }
                 default -> { }
+                }
+                applyFilters();
+                saveViewTabsPreferences();
+            } finally {
+                applyingViewPreset[0] = false;
             }
-            applyFilters();
-            saveViewTabsPreferences();
         });
 
         Node tasksRow;
