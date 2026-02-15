@@ -313,7 +313,7 @@ public class MainController {
         deleteActivityMenuItem = menuItemWithIcon(i18n("menu.activity.delete"), "delete", this::deleteActivity);
         consolidateActivityMenuItem = menuItemWithIcon(
             i18n("menu.activity.consolidate"),
-            "manage",
+            "consolidate",
             this::consolidateFilteredActivities
         );
         consolidateActivityMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.C, KeyCombination.SHORTCUT_DOWN));
@@ -337,7 +337,7 @@ public class MainController {
     }
 
     private Menu settingsMenu() {
-        settingsMenuItem = menuItemWithIcon(i18n("menu.settings.open"), "manage", this::openSettingsDialog);
+        settingsMenuItem = menuItemWithIcon(i18n("menu.settings.open"), "settings", this::openSettingsDialog);
         settingsMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.S, KeyCombination.SHORTCUT_DOWN));
         settingsMenu = new Menu(i18n("menu.settings"));
         settingsMenu.getItems().add(settingsMenuItem);
@@ -465,9 +465,9 @@ public class MainController {
         addActivityToolbarButton = toolbarButton(i18n("menu.activity.add"), "add", this::addActivity);
         addViewButton = toolbarButton(i18n("menu.view.new"), "add", this::openNewViewDialog);
         manageButton = toolbarButton(i18n("menu.manage.open"), "manage", this::openManagementDialog);
-        consolidateButton = toolbarButton(i18n("menu.activity.consolidate"), "manage", this::consolidateFilteredActivities);
+        consolidateButton = toolbarButton(i18n("menu.activity.consolidate"), "consolidate", this::consolidateFilteredActivities);
         writeTimesheetButton = toolbarButton(i18n("menu.file.timesheet"), "export", this::writeTimesheet);
-        settingsButton = toolbarButton(i18n("menu.settings.open"), "manage", this::openSettingsDialog);
+        settingsButton = toolbarButton(i18n("menu.settings.open"), "settings", this::openSettingsDialog);
 
         return new ToolBar(
             addActivityToolbarButton,
@@ -498,7 +498,13 @@ public class MainController {
                 path.setContent("M3 4h10v1H3z M6 2h4l1 1H5z M5 5h1v8H5z M10 5h1v8h-1z M4 4h8l-1 10H5z");
                 break;
             case "manage":
-                path.setContent("M6 1h4l1 2h3v2h-2l-1 2 1 2h2v2h-3l-1 2H6l-1-2H2v-2h2l1-2-1-2H2V3h3z M8 6a2 2 0 110 4 2 2 0 010-4z");
+                path.setContent("M7 1h2v2H7V1zM7 3h2v2H7V3zM4 5h8v1H4V5zM5 6h2v2H5V6zM9 6h2v2H9V6z");
+                break;
+            case "consolidate":
+                path.setContent("M6 1h4l1 2h3v2h-2l-1 2 1 2h2v2h-3l-1 2H6l-1-2H2v-2h2l1-2-1-2H2V3h3zM8 6a2 2 0 110 4 2 2 0 010-4z");
+                break;
+            case "settings":
+                path.setContent("M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 01-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 01.872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 012.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 012.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 01.872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 01-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 01-2.105-.872l-.1-.34zM6 8a2 2 0 1 1 4 0 2 2 0 0 1-4 0z");
                 break;
             case "import":
                 path.setContent("M8 2v7l2-2 1 1-4 4-4-4 1-1 2 2V2z M2 13h12v2H2z");
@@ -514,8 +520,13 @@ public class MainController {
                 break;
         }
         path.setFill(color);
-        path.setScaleX(1.1);
-        path.setScaleY(1.1);
+        if ("manage".equals(iconKey)) {
+            path.setScaleX(1.8);
+            path.setScaleY(1.8);
+        } else {
+            path.setScaleX(1.1);
+            path.setScaleY(1.1);
+        }
         return path;
     }
 
