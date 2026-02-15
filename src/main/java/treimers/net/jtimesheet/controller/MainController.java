@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -40,6 +41,7 @@ import com.calendarfx.model.CalendarSource;
 import com.calendarfx.model.Entry;
 import com.calendarfx.model.Interval;
 import com.calendarfx.view.CalendarView;
+import com.calendarfx.view.CalendarView.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
@@ -90,6 +92,7 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
@@ -202,8 +205,11 @@ public class MainController {
     private TableColumn<Activity, String> dailyTotalColumn;
 
     private TabPane viewTabPane;
-    private TabPane contentTabPane;
-    private Calendar<Activity> activitiesCalendar;
+    private StackPane tableOrCalendarStack;
+    private Node calendarViewNode;
+    private static final int CALENDAR_TAB_INDEX = 1;
+    private CalendarSource calendarSource;
+    private Map<String, Calendar<Activity>> calendarsByCustomerProject = new HashMap<>();
     private final List<Entry<Activity>> calendarEntries = new ArrayList<>();
     private final List<ViewTabState> viewTabStates = new ArrayList<>();
     private boolean restoringViewTabs;
@@ -249,7 +255,19 @@ public class MainController {
         mainTab.setClosable(false);
         mainTab.setContent(createFilterPanel());
         viewTabPane.getTabs().add(mainTab);
+
+        Tab calendarTab = new Tab(i18n("view.tab.calendar"));
+        calendarTab.setClosable(false);
+        calendarTab.setContent(new Region());
+        viewTabPane.getTabs().add(calendarTab);
+
+        calendarViewNode = createCalendarContent();
+        tableOrCalendarStack = new StackPane(activityTable, calendarViewNode);
+        calendarViewNode.setVisible(false);
+        VBox.setVgrow(tableOrCalendarStack, Priority.ALWAYS);
+
         viewTabPane.getSelectionModel().selectedIndexProperty().addListener((obs, oldIdx, newIdx) -> {
+            updateTableOrCalendarVisibility();
             applyFilters();
             updateWriteTimesheetButtonForTab();
             saveViewTabsPreferences();
@@ -270,22 +288,18 @@ public class MainController {
             }
         });
 
-        contentTabPane = new TabPane();
-        Tab tableTab = new Tab(i18n("view.tab.table"));
-        tableTab.setClosable(false);
-        tableTab.setContent(activityTable);
-        Tab calendarTab = new Tab(i18n("view.tab.calendar"));
-        calendarTab.setClosable(false);
-        calendarTab.setContent(createCalendarContent());
-        contentTabPane.getTabs().addAll(tableTab, calendarTab);
-
-        VBox activityPanel = new VBox(10, activityHeader, viewTabPane, contentTabPane);
+        VBox activityPanel = new VBox(10, activityHeader, viewTabPane, tableOrCalendarStack);
         activityPanel.setPadding(new Insets(12));
-        VBox.setVgrow(contentTabPane, Priority.ALWAYS);
+        VBox.setVgrow(tableOrCalendarStack, Priority.ALWAYS);
 
         MainView view = new MainView(menuBar, toolBar, activityPanel);
 
         Scene scene = new Scene(view.getRoot(), 900, 520);
+        // Ensure CalendarFX library styles (calendar.css with -style1-color … -style7-color) are applied.
+        URL calendarFxCss = CalendarView.class.getResource("calendar.css");
+        if (calendarFxCss != null) {
+            scene.getStylesheets().add(calendarFxCss.toExternalForm());
+        }
         stage.setTitle(i18n("app.title"));
         stage.setScene(scene);
         stage.setMaximized(true);
@@ -293,6 +307,7 @@ public class MainController {
 
         loadData();
         setLastActivityFromData();
+        updateTableOrCalendarVisibility();
         updateWriteTimesheetButtonForTab();
         startReminderScheduler();
     }
@@ -433,11 +448,11 @@ public class MainController {
             return customerFilter != null ? customerFilter.getValue() : null;
         }
         int idx = viewTabPane.getSelectionModel().getSelectedIndex();
-        if (idx <= 0) {
+        if (idx <= 0 || idx == CALENDAR_TAB_INDEX) {
             return customerFilter != null ? customerFilter.getValue() : null;
         }
-        int stateIndex = idx - 1;
-        if (stateIndex < viewTabStates.size()) {
+        int stateIndex = idx - 2;
+        if (stateIndex >= 0 && stateIndex < viewTabStates.size()) {
             return viewTabStates.get(stateIndex).getFixedCustomer();
         }
         return null;
@@ -448,7 +463,7 @@ public class MainController {
             return;
         }
         int idx = viewTabPane != null ? viewTabPane.getSelectionModel().getSelectedIndex() : 0;
-        if (idx <= 0) {
+        if (idx <= 0 || idx == CALENDAR_TAB_INDEX) {
             writeTimesheetMenuItem.disableProperty().bind(customerFilter.valueProperty().isNull());
             writeTimesheetButton.disableProperty().bind(customerFilter.valueProperty().isNull());
         } else {
@@ -652,15 +667,30 @@ public class MainController {
         return table;
     }
 
+    private void updateTableOrCalendarVisibility() {
+        if (tableOrCalendarStack == null || calendarViewNode == null) {
+            return;
+        }
+        int idx = viewTabPane != null ? viewTabPane.getSelectionModel().getSelectedIndex() : 0;
+        boolean showCalendar = (idx == CALENDAR_TAB_INDEX);
+        calendarViewNode.setVisible(showCalendar);
+        activityTable.setVisible(!showCalendar);
+        if (showCalendar) {
+            tableOrCalendarStack.getChildren().get(1).toFront();
+        } else {
+            tableOrCalendarStack.getChildren().get(0).toFront();
+        }
+    }
+
     private Node createCalendarContent() {
-        activitiesCalendar = new Calendar<>(i18n("section.activities"));
-        activitiesCalendar.setStyle(Calendar.Style.STYLE1);
-        activitiesCalendar.setReadOnly(true);
-        CalendarSource source = new CalendarSource("");
-        source.getCalendars().add(activitiesCalendar);
-        CalendarView calendarView = new CalendarView();
-        calendarView.getCalendarSources().add(source);
+        calendarSource = new CalendarSource(i18n("section.activities"));
+        CalendarView calendarView = new CalendarView(Page.WEEK, Page.DAY, Page.MONTH, Page.YEAR);
+        calendarView.getCalendarSources().clear();
+        calendarView.getCalendarSources().add(calendarSource);
+        calendarView.setShowAddCalendarButton(false);
         calendarView.setRequestedTime(LocalTime.now());
+        restoreCalendarPreferences(calendarView);
+        calendarView.selectedPageProperty().addListener((obs, oldPage, newPage) -> saveCalendarPagePreference(newPage));
         Thread updateTimeThread = new Thread("Calendar: Update Time") {
             @Override
             public void run() {
@@ -681,33 +711,138 @@ public class MainController {
         updateTimeThread.setPriority(Thread.MIN_PRIORITY);
         updateTimeThread.setDaemon(true);
         updateTimeThread.start();
-        filteredActivities.addListener((ListChangeListener<Activity>) c -> syncCalendarFromFilteredActivities());
-        syncCalendarFromFilteredActivities();
+        activities.addListener((ListChangeListener<Activity>) c -> syncAllCalendarsFromActivities());
+        syncAllCalendarsFromActivities();
         return calendarView;
     }
 
-    private void syncCalendarFromFilteredActivities() {
-        if (activitiesCalendar == null) {
+    /** One CalendarFX calendar per (customer, project); styles assigned by (customer|project) for stable colors. */
+    private void syncAllCalendarsFromActivities() {
+        if (calendarSource == null || calendarsByCustomerProject == null) {
             return;
         }
-        for (Entry<Activity> entry : calendarEntries) {
-            entry.setCalendar(null);
+        for (Calendar<Activity> cal : calendarsByCustomerProject.values()) {
+            cal.startBatchUpdates();
+            cal.clear();
         }
         calendarEntries.clear();
+        Calendar.Style[] styles = Calendar.Style.values();
         ZoneId zone = ZoneId.systemDefault();
-        for (Activity activity : filteredActivities) {
+        Map<String, List<Activity>> slotGroupsByKey = new HashMap<>();
+        for (Activity activity : activities) {
             LocalDateTime from = Activity.parseStoredDateTime(activity.getFrom());
             LocalDateTime to = Activity.parseStoredDateTime(activity.getTo());
-            if (from == null || to == null) {
-                continue;
+            if (from == null || to == null) continue;
+            String slotKey = activity.getCustomerId() + "|" + activity.getProjectId() + "|" + from + "|" + to;
+            slotGroupsByKey.computeIfAbsent(slotKey, k -> new ArrayList<>()).add(activity);
+        }
+        // Distinct (customer|project) keys in stable order, so same key always gets same style even when sync runs multiple times.
+        Set<String> cpKeySet = new HashSet<>();
+        for (Map.Entry<String, List<Activity>> e : slotGroupsByKey.entrySet()) {
+            Activity first = e.getValue().get(0);
+            cpKeySet.add(first.getCustomerId() + "|" + first.getProjectId());
+        }
+        List<String> distinctCpKeys = new ArrayList<>(cpKeySet);
+        Collections.sort(distinctCpKeys);
+        Map<String, Calendar.Style> styleByCpKey = new HashMap<>();
+        for (int i = 0; i < distinctCpKeys.size(); i++) {
+            styleByCpKey.put(distinctCpKeys.get(i), styles[i % styles.length]);
+        }
+        List<Map.Entry<String, List<Activity>>> slotOrder = new ArrayList<>(slotGroupsByKey.entrySet());
+        slotOrder.sort(Comparator.comparing(e -> e.getValue().get(0).getCustomerId() + "|" + e.getValue().get(0).getProjectId()));
+        for (Map.Entry<String, List<Activity>> slotEntry : slotOrder) {
+            List<Activity> group = slotEntry.getValue();
+            if (group.isEmpty()) continue;
+            Activity first = group.get(0);
+            LocalDateTime from = Activity.parseStoredDateTime(first.getFrom());
+            LocalDateTime to = Activity.parseStoredDateTime(first.getTo());
+            if (from == null || to == null) continue;
+            String cpKey = first.getCustomerId() + "|" + first.getProjectId();
+            Calendar<Activity> cal = calendarsByCustomerProject.get(cpKey);
+            if (cal == null) {
+                String name = buildCustomerProjectLabel(first);
+                cal = new Calendar<>(name);
+                cal.setStyle(styleByCpKey.getOrDefault(cpKey, styles[0]));
+                cal.setReadOnly(true);
+                calendarsByCustomerProject.put(cpKey, cal);
             }
-            String title = buildActivityTitleForCalendar(activity);
+            String title = group.size() > 1
+                ? buildGroupedActivityTitleForCalendar(first, group.size())
+                : buildActivityTitleForCalendar(first);
             Entry<Activity> entry = new Entry<>(title);
             entry.setInterval(new Interval(from, to, zone));
-            entry.setUserObject(activity);
-            activitiesCalendar.addEntry(entry);
+            entry.setUserObject(first);
+            cal.addEntry(entry);
             calendarEntries.add(entry);
         }
+        for (Calendar<Activity> cal : calendarsByCustomerProject.values()) {
+            cal.stopBatchUpdates();
+        }
+        Platform.runLater(this::attachCalendarsToView);
+    }
+
+    private String buildCustomerProjectLabel(Activity activity) {
+        String c = resolveCustomerName(activity.getCustomerId());
+        String p = resolveProjectName(activity.getProjectId());
+        if (c != null && p != null) return c + " / " + p;
+        if (c != null) return c;
+        return p != null ? p : i18n("section.activities");
+    }
+
+    private void attachCalendarsToView() {
+        if (calendarSource == null) return;
+        calendarSource.getCalendars().clear();
+        List<String> orderedKeys = new ArrayList<>(calendarsByCustomerProject.keySet());
+        Collections.sort(orderedKeys);
+        for (String key : orderedKeys) {
+            calendarSource.getCalendars().add(calendarsByCustomerProject.get(key));
+        }
+        tryRestoreCalendarVisibilityPreference();
+    }
+
+    private static final String PREF_CALENDAR_PAGE = "calendar.page";
+    private static final String PREF_CALENDAR_VISIBLE = "calendar.visible";
+
+    private void saveCalendarPagePreference(Page page) {
+        if (page != null) {
+            preferences.put(PREF_CALENDAR_PAGE, page.name());
+        }
+    }
+
+    private void restoreCalendarPreferences(CalendarView calendarView) {
+        String pageName = preferences.get(PREF_CALENDAR_PAGE, Page.WEEK.name());
+        try {
+            Page page = Page.valueOf(pageName);
+            if (calendarView.getAvailablePages().contains(page)) {
+                switch (page) {
+                    case DAY: calendarView.showDayPage(); break;
+                    case WEEK: calendarView.showWeekPage(); break;
+                    case MONTH: calendarView.showMonthPage(); break;
+                    case YEAR: calendarView.showYearPage(); break;
+                    default: break;
+                }
+            }
+        } catch (Exception ignored) {
+            calendarView.showWeekPage();
+        }
+    }
+
+    /** Calendar visibility (which calendars are shown in the tray) is not exposed by CalendarFX public API; placeholder for future. */
+    private void tryRestoreCalendarVisibilityPreference() {
+        String saved = preferences.get(PREF_CALENDAR_VISIBLE, "");
+        if (saved.isEmpty()) return;
+    }
+
+    private String buildGroupedActivityTitleForCalendar(Activity representative, int count) {
+        String customer = resolveCustomerName(representative.getCustomerId());
+        String project = resolveProjectName(representative.getProjectId());
+        if (customer != null && project != null) {
+            return customer + " / " + project + " " + i18n("calendar.entry.count", count);
+        }
+        if (customer != null) {
+            return customer + " " + i18n("calendar.entry.count", count);
+        }
+        return i18n("section.activities") + " " + i18n("calendar.entry.count", count);
     }
 
     private String buildActivityTitleForCalendar(Activity activity) {
@@ -1349,8 +1484,8 @@ public class MainController {
             return;
         }
         restoringViewTabs = true;
-        // Remove all tabs except the first (main tab) so we don't duplicate when called from loadData()
-        while (viewTabPane.getTabs().size() > 1) {
+        // Keep main tab and calendar tab; remove view tabs so we don't duplicate when called from loadData()
+        while (viewTabPane.getTabs().size() > 2) {
             viewTabPane.getTabs().remove(viewTabPane.getTabs().size() - 1);
         }
         viewTabStates.clear();
@@ -1504,13 +1639,16 @@ public class MainController {
         if (filteredActivities == null) {
             return;
         }
+        int tabIndex = viewTabPane != null ? viewTabPane.getSelectionModel().getSelectedIndex() : 0;
+        if (tabIndex == CALENDAR_TAB_INDEX) {
+            return;
+        }
         Customer customer;
         Project project;
         List<String> selectedTaskIds;
         LocalDate from;
         LocalDate to;
 
-        int tabIndex = viewTabPane != null ? viewTabPane.getSelectionModel().getSelectedIndex() : 0;
         if (tabIndex <= 0) {
             customer = customerFilter.getValue();
             project = projectFilter.getValue();
@@ -1521,8 +1659,8 @@ public class MainController {
             from = fromFilter.getValue();
             to = toFilter.getValue();
         } else {
-            int stateIndex = tabIndex - 1;
-            if (stateIndex >= viewTabStates.size()) {
+            int stateIndex = tabIndex - 2;
+            if (stateIndex < 0 || stateIndex >= viewTabStates.size()) {
                 return;
             }
             ViewTabState state = viewTabStates.get(stateIndex);
