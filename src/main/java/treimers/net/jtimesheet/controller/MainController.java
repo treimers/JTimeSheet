@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
@@ -34,6 +35,11 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.prefs.Preferences;
 
+import com.calendarfx.model.Calendar;
+import com.calendarfx.model.CalendarSource;
+import com.calendarfx.model.Entry;
+import com.calendarfx.model.Interval;
+import com.calendarfx.view.CalendarView;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
@@ -196,6 +202,9 @@ public class MainController {
     private TableColumn<Activity, String> dailyTotalColumn;
 
     private TabPane viewTabPane;
+    private TabPane contentTabPane;
+    private Calendar<Activity> activitiesCalendar;
+    private final List<Entry<Activity>> calendarEntries = new ArrayList<>();
     private final List<ViewTabState> viewTabStates = new ArrayList<>();
     private boolean restoringViewTabs;
     private Stage helpDialog;
@@ -261,9 +270,18 @@ public class MainController {
             }
         });
 
-        VBox activityPanel = new VBox(10, activityHeader, viewTabPane, activityTable);
+        contentTabPane = new TabPane();
+        Tab tableTab = new Tab(i18n("view.tab.table"));
+        tableTab.setClosable(false);
+        tableTab.setContent(activityTable);
+        Tab calendarTab = new Tab(i18n("view.tab.calendar"));
+        calendarTab.setClosable(false);
+        calendarTab.setContent(createCalendarContent());
+        contentTabPane.getTabs().addAll(tableTab, calendarTab);
+
+        VBox activityPanel = new VBox(10, activityHeader, viewTabPane, contentTabPane);
         activityPanel.setPadding(new Insets(12));
-        VBox.setVgrow(activityTable, Priority.ALWAYS);
+        VBox.setVgrow(contentTabPane, Priority.ALWAYS);
 
         MainView view = new MainView(menuBar, toolBar, activityPanel);
 
@@ -632,6 +650,80 @@ public class MainController {
             return row;
         });
         return table;
+    }
+
+    private Node createCalendarContent() {
+        activitiesCalendar = new Calendar<>(i18n("section.activities"));
+        activitiesCalendar.setStyle(Calendar.Style.STYLE1);
+        activitiesCalendar.setReadOnly(true);
+        CalendarSource source = new CalendarSource("");
+        source.getCalendars().add(activitiesCalendar);
+        CalendarView calendarView = new CalendarView();
+        calendarView.getCalendarSources().add(source);
+        calendarView.setRequestedTime(LocalTime.now());
+        Thread updateTimeThread = new Thread("Calendar: Update Time") {
+            @Override
+            public void run() {
+                while (true) {
+                    Platform.runLater(() -> {
+                        calendarView.setToday(LocalDate.now());
+                        calendarView.setTime(LocalTime.now());
+                    });
+                    try {
+                        Thread.sleep(10_000);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+        };
+        updateTimeThread.setPriority(Thread.MIN_PRIORITY);
+        updateTimeThread.setDaemon(true);
+        updateTimeThread.start();
+        filteredActivities.addListener((ListChangeListener<Activity>) c -> syncCalendarFromFilteredActivities());
+        syncCalendarFromFilteredActivities();
+        return calendarView;
+    }
+
+    private void syncCalendarFromFilteredActivities() {
+        if (activitiesCalendar == null) {
+            return;
+        }
+        for (Entry<Activity> entry : calendarEntries) {
+            entry.setCalendar(null);
+        }
+        calendarEntries.clear();
+        ZoneId zone = ZoneId.systemDefault();
+        for (Activity activity : filteredActivities) {
+            LocalDateTime from = Activity.parseStoredDateTime(activity.getFrom());
+            LocalDateTime to = Activity.parseStoredDateTime(activity.getTo());
+            if (from == null || to == null) {
+                continue;
+            }
+            String title = buildActivityTitleForCalendar(activity);
+            Entry<Activity> entry = new Entry<>(title);
+            entry.setInterval(new Interval(from, to, zone));
+            entry.setUserObject(activity);
+            activitiesCalendar.addEntry(entry);
+            calendarEntries.add(entry);
+        }
+    }
+
+    private String buildActivityTitleForCalendar(Activity activity) {
+        String customer = resolveCustomerName(activity.getCustomerId());
+        String project = resolveProjectName(activity.getProjectId());
+        String task = resolveTaskName(activity.getTaskId());
+        if (customer != null && project != null && task != null) {
+            return customer + " / " + project + " / " + task;
+        }
+        if (customer != null && project != null) {
+            return customer + " / " + project;
+        }
+        if (customer != null) {
+            return customer;
+        }
+        return task != null ? task : (project != null ? project : i18n("section.activities"));
     }
 
     private VBox createFilterPanel() {
