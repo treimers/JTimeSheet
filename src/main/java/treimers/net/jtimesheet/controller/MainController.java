@@ -2675,6 +2675,7 @@ public class MainController {
                 activityTable.refresh();
                 activityTable.getSelectionModel().select(lastActivity);
             }
+            syncAllCalendarsFromActivities();
         } else {
             activities.add(activity);
             lastActivity = activity;
@@ -2741,6 +2742,7 @@ public class MainController {
                 activityTable.refresh();
                 saveData();
                 applyFilters();
+                syncAllCalendarsFromActivities();
                 return;
             }
             reopenWith = value;
