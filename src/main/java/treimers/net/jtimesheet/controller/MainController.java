@@ -1697,8 +1697,7 @@ public class MainController {
         long delayMs = delay.toMillis();
         if (delayMs <= 0) {
             Platform.runLater(() -> {
-                LocalDateTime[] range = suggestedPromptRange(LocalDateTime.now());
-                openAddOrPromptActivityDialog(i18n("activity.add.title"), range[0], range[1]);
+                openAddOrPromptActivityDialog(i18n("activity.add.title"), LocalDateTime.now());
                 scheduleNextReminder();
             });
             return;
@@ -1706,8 +1705,7 @@ public class MainController {
         reminderDelay = new PauseTransition(millis(delayMs));
         reminderDelay.setOnFinished(event -> {
             Platform.runLater(() -> {
-                LocalDateTime[] range = suggestedPromptRange(LocalDateTime.now());
-                openAddOrPromptActivityDialog(i18n("activity.add.title"), range[0], range[1]);
+                openAddOrPromptActivityDialog(i18n("activity.add.title"), LocalDateTime.now());
                 scheduleNextReminder();
             });
         });
@@ -1753,45 +1751,79 @@ public class MainController {
         return base;
     }
 
-    /** Opens the add activity dialog with shared defaults (last or first customer/project/task). */
-    private void openAddOrPromptActivityDialog(String title, LocalDateTime defaultFrom, LocalDateTime defaultTo) {
+    /** Opens the add activity dialog with shared defaults (last or first customer/project/task). If overlap is found and user cancels the overlap dialog, the add dialog is shown again with the same values. */
+    private void openAddOrPromptActivityDialog(String title, LocalDateTime now) {
         Customer defaultCustomer = getDefaultCustomerForNewActivity();
         DefaultProjectAndTask defaultPt = defaultCustomer != null ? getLastProjectAndTaskForCustomer(defaultCustomer) : null;
         Project defaultProject = defaultPt != null ? defaultPt.getProject() : null;
         Task defaultTask = defaultPt != null ? defaultPt.getTask() : null;
-        Optional<ActivityInput> input = showActivityDialog(
-            title,
-            null,
-            defaultFrom,
-            defaultTo,
-            defaultCustomer,
-            defaultProject,
-            defaultTask,
-            this::getLastProjectAndTaskForCustomer
-        );
-        input.ifPresent(this::addOrMergeActivity);
+        LocalDateTime[] range = suggestedPromptRange(now, defaultCustomer, defaultProject);
+        ActivityInput reopenWith = null;
+        while (true) {
+            Optional<ActivityInput> input = showActivityDialog(
+                title,
+                null,
+                reopenWith != null ? reopenWith.getFrom() : range[0],
+                reopenWith != null ? reopenWith.getTo() : range[1],
+                reopenWith != null ? reopenWith.getCustomer() : defaultCustomer,
+                reopenWith != null ? reopenWith.getProject() : defaultProject,
+                reopenWith != null ? reopenWith.getTask() : defaultTask,
+                this::getLastProjectAndTaskForCustomer,
+                this::suggestedPromptRangeForSelection
+            );
+            if (!input.isPresent()) {
+                return;
+            }
+            ActivityInput activityInput = input.get();
+            Optional<ActivityInput> toApply = checkOverlapAndConfirm(activityInput, null);
+            if (toApply.isPresent()) {
+                addOrMergeActivity(toApply.get());
+                return;
+            }
+            reopenWith = activityInput;
+        }
     }
 
-    private LocalDateTime[] suggestedPromptRange(LocalDateTime now) {
+    /**
+     * Suggested time range for new activity: if the given customer (and optional project) had an activity ending today,
+     * use that end as start and now as end; otherwise now-1h to now.
+     */
+    private LocalDateTime[] suggestedPromptRange(LocalDateTime now, Customer customer, Project project) {
         LocalDateTime from = now.minusHours(1);
         LocalDateTime to = now;
-        if (lastActivity != null) {
+        Activity last = null;
+        if (customer != null) {
+            last = project != null
+                ? findLastActivityForProject(customer.getId(), project.getId())
+                : findLastActivityForCustomer(customer.getId());
+        }
+        if (last == null && customer == null && lastActivity != null) {
             LocalDateTime lastTo = Activity.parseStoredDateTime(lastActivity.getTo());
-            if (lastTo != null) {
-                LocalDate lastDate = lastTo.toLocalDate();
-                if (lastDate.equals(now.toLocalDate())) {
-                    from = lastTo;
-                    to = now;
-                } else if (lastDate.equals(now.toLocalDate().minusDays(1))) {
-                    from = now.minusHours(1);
-                    to = now;
-                }
+            if (lastTo != null && lastTo.toLocalDate().equals(now.toLocalDate())) {
+                from = lastTo;
+                to = now.isBefore(lastTo) ? lastTo.plusHours(1) : now;
+            }
+            if (from.isAfter(to)) {
+                to = from.plusHours(1);
+            }
+            return new LocalDateTime[] { from, to };
+        }
+        if (last != null) {
+            LocalDateTime lastTo = Activity.parseStoredDateTime(last.getTo());
+            if (lastTo != null && lastTo.toLocalDate().equals(now.toLocalDate())) {
+                from = lastTo;
+                to = now.isBefore(lastTo) ? lastTo.plusHours(1) : now;
             }
         }
         if (from.isAfter(to)) {
-            from = to;
+            to = from.plusHours(1);
         }
         return new LocalDateTime[] { from, to };
+    }
+
+    /** Callback for Add dialog: returns suggested [from, to] when user changes customer or project. */
+    private LocalDateTime[] suggestedPromptRangeForSelection(Customer customer, Project project) {
+        return suggestedPromptRange(LocalDateTime.now(), customer, project);
     }
 
     private void importCsv() {
@@ -2249,8 +2281,167 @@ public class MainController {
     }
 
     private void addActivity() {
-        LocalDateTime[] range = suggestedPromptRange(LocalDateTime.now());
-        openAddOrPromptActivityDialog(i18n("activity.add.title"), range[0], range[1]);
+        openAddOrPromptActivityDialog(i18n("activity.add.title"), LocalDateTime.now());
+    }
+
+    /** Returns activities that overlap with [from, to), excluding {@code exclude}. Touching (end == start) is not overlap. */
+    private List<Activity> findOverlappingActivities(LocalDateTime from, LocalDateTime to, Activity exclude) {
+        if (from == null || to == null || !from.isBefore(to)) {
+            return Collections.emptyList();
+        }
+        List<Activity> result = new ArrayList<>();
+        for (Activity a : activities) {
+            if (a == exclude) {
+                continue;
+            }
+            LocalDateTime aFrom = Activity.parseStoredDateTime(a.getFrom());
+            LocalDateTime aTo = Activity.parseStoredDateTime(a.getTo());
+            if (aFrom == null || aTo == null) {
+                continue;
+            }
+            if (from.isBefore(aTo) && aFrom.isBefore(to)) {
+                result.add(a);
+            }
+        }
+        result.sort(Comparator.comparing(a -> Activity.parseStoredDateTime(a.getFrom())));
+        return result;
+    }
+
+    /**
+     * If the proposed input overlaps with existing activities, shows a dialog once with overlap list and correction suggestions.
+     * Suggestions are free slots (no overlap): one before and/or one after the conflict range. Dialog pops up only once.
+     */
+    private Optional<ActivityInput> checkOverlapAndConfirm(ActivityInput input, Activity excludeForEdit) {
+        List<Activity> overlapping = findOverlappingActivities(input.getFrom(), input.getTo(), excludeForEdit);
+        if (overlapping.isEmpty()) {
+            return Optional.of(input);
+        }
+        return showOverlapDialog(input, overlapping, excludeForEdit);
+    }
+
+    /** Finds a free slot of the given duration that ends at or before {@code slotEndBy}, no overlap with any activity. */
+    private LocalDateTime[] findFreeSlotBefore(LocalDateTime slotEndBy, long durationMinutes, Activity exclude) {
+        LocalDateTime slotTo = slotEndBy;
+        LocalDateTime slotFrom = slotTo.minusMinutes(durationMinutes);
+        for (int i = 0; i < 200; i++) {
+            List<Activity> conflict = findOverlappingActivities(slotFrom, slotTo, exclude);
+            if (conflict.isEmpty()) {
+                return new LocalDateTime[] { slotFrom, slotTo };
+            }
+            LocalDateTime earliestFrom = null;
+            for (Activity a : conflict) {
+                LocalDateTime aFrom = Activity.parseStoredDateTime(a.getFrom());
+                if (aFrom != null && (earliestFrom == null || aFrom.isBefore(earliestFrom))) {
+                    earliestFrom = aFrom;
+                }
+            }
+            if (earliestFrom == null || !earliestFrom.isBefore(slotTo)) {
+                return null;
+            }
+            slotTo = earliestFrom;
+            slotFrom = slotTo.minusMinutes(durationMinutes);
+        }
+        return null;
+    }
+
+    /** Finds a free slot of the given duration that starts at or after {@code slotStartFrom}, no overlap with any activity. */
+    private LocalDateTime[] findFreeSlotAfter(LocalDateTime slotStartFrom, long durationMinutes, Activity exclude) {
+        LocalDateTime slotFrom = slotStartFrom;
+        LocalDateTime slotTo = slotFrom.plusMinutes(durationMinutes);
+        for (int i = 0; i < 200; i++) {
+            List<Activity> conflict = findOverlappingActivities(slotFrom, slotTo, exclude);
+            if (conflict.isEmpty()) {
+                return new LocalDateTime[] { slotFrom, slotTo };
+            }
+            LocalDateTime latestTo = null;
+            for (Activity a : conflict) {
+                LocalDateTime aTo = Activity.parseStoredDateTime(a.getTo());
+                if (aTo != null && (latestTo == null || aTo.isAfter(latestTo))) {
+                    latestTo = aTo;
+                }
+            }
+            if (latestTo == null || !slotFrom.isBefore(latestTo)) {
+                return null;
+            }
+            slotFrom = latestTo;
+            slotTo = slotFrom.plusMinutes(durationMinutes);
+        }
+        return null;
+    }
+
+    private Optional<ActivityInput> showOverlapDialog(ActivityInput input, List<Activity> overlapping, Activity excludeForEdit) {
+        StringBuilder content = new StringBuilder();
+        content.append(i18n("activity.overlap.message"));
+        content.append("\n\n");
+        DateTimeFormatter displayFormat = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm", currentLocale);
+        for (Activity a : overlapping) {
+            Customer c = findCustomerById(a.getCustomerId());
+            Project p = c != null ? findProjectById(c, a.getProjectId()) : null;
+            Task t = p != null ? findTaskById(p, a.getTaskId()) : null;
+            String customerName = c != null ? c.getName() : a.getCustomerId();
+            String projectName = p != null ? p.getName() : a.getProjectId();
+            String taskName = t != null ? t.getName() : a.getTaskId();
+            LocalDateTime aFrom = Activity.parseStoredDateTime(a.getFrom());
+            LocalDateTime aTo = Activity.parseStoredDateTime(a.getTo());
+            String fromStr = aFrom != null ? aFrom.format(displayFormat) : a.getFrom();
+            String toStr = aTo != null ? aTo.format(displayFormat) : a.getTo();
+            content.append("• ").append(customerName).append(", ").append(projectName).append(", ").append(taskName)
+                .append(": ").append(fromStr).append(" – ").append(toStr).append("\n");
+        }
+
+        long durationMinutes = Duration.between(input.getFrom(), input.getTo()).toMinutes();
+        LocalDateTime firstFrom = null;
+        LocalDateTime lastTo = null;
+        for (Activity a : overlapping) {
+            LocalDateTime aFrom = Activity.parseStoredDateTime(a.getFrom());
+            LocalDateTime aTo = Activity.parseStoredDateTime(a.getTo());
+            if (aFrom != null && (firstFrom == null || aFrom.isBefore(firstFrom))) {
+                firstFrom = aFrom;
+            }
+            if (aTo != null && (lastTo == null || aTo.isAfter(lastTo))) {
+                lastTo = aTo;
+            }
+        }
+
+        ButtonType applyAnyway = new ButtonType(i18n("activity.overlap.applyAnyway"), ButtonData.OK_DONE);
+        ButtonType cancel = new ButtonType(i18n("button.cancel"), ButtonData.CANCEL_CLOSE);
+
+        List<ButtonType> buttons = new ArrayList<>();
+        buttons.add(applyAnyway);
+        List<ActivityInput> suggestions = new ArrayList<>();
+        if (lastTo != null && durationMinutes > 0) {
+            LocalDateTime[] slotAfter = findFreeSlotAfter(lastTo, durationMinutes, excludeForEdit);
+            if (slotAfter != null) {
+                String rangeStr = slotAfter[0].format(displayFormat) + " – " + slotAfter[1].format(displayFormat);
+                suggestions.add(new ActivityInput(input.getCustomer(), input.getProject(), input.getTask(), slotAfter[0], slotAfter[1]));
+                buttons.add(new ButtonType(i18n("activity.overlap.suggestion.after", rangeStr), ButtonData.APPLY));
+            }
+        }
+        if (firstFrom != null && durationMinutes > 0) {
+            LocalDateTime[] slotBefore = findFreeSlotBefore(firstFrom, durationMinutes, excludeForEdit);
+            if (slotBefore != null) {
+                String rangeStr = slotBefore[0].format(displayFormat) + " – " + slotBefore[1].format(displayFormat);
+                suggestions.add(new ActivityInput(input.getCustomer(), input.getProject(), input.getTask(), slotBefore[0], slotBefore[1]));
+                buttons.add(new ButtonType(i18n("activity.overlap.suggestion.before", rangeStr), ButtonData.APPLY));
+            }
+        }
+        buttons.add(cancel);
+
+        Alert alert = new Alert(AlertType.WARNING, content.toString(), buttons.toArray(new ButtonType[0]));
+        alert.setTitle(i18n("activity.overlap.title"));
+        alert.setHeaderText(null);
+        Optional<ButtonType> choice = alert.showAndWait();
+        if (!choice.isPresent() || choice.get() == cancel) {
+            return Optional.empty();
+        }
+        if (choice.get() == applyAnyway) {
+            return Optional.of(input);
+        }
+        int index = buttons.indexOf(choice.get());
+        if (index >= 1 && index - 1 < suggestions.size()) {
+            return Optional.of(suggestions.get(index - 1));
+        }
+        return Optional.of(input);
     }
 
     private void addOrMergeActivity(ActivityInput input) {
@@ -2302,18 +2493,41 @@ public class MainController {
             showInfo(i18n("activity.edit.select"));
             return;
         }
-        Optional<ActivityInput> input = showActivityDialog(i18n("activity.edit.title"), selected);
-        input.ifPresent(value -> {
-            selected.setCustomerId(value.getCustomer().getId());
-            selected.setProjectId(value.getProject().getId());
-            selected.setTaskId(value.getTask().getId());
-            selected.setFrom(formatDateTime(value.getFrom()));
-            selected.setTo(formatDateTime(value.getTo()));
-            lastActivity = selected;
-            activityTable.refresh();
-            saveData();
-            applyFilters();
-        });
+        ActivityInput reopenWith = null;
+        while (true) {
+            Optional<ActivityInput> input = reopenWith != null
+                ? showActivityDialog(
+                    i18n("activity.edit.title"),
+                    selected,
+                    reopenWith.getFrom(),
+                    reopenWith.getTo(),
+                    reopenWith.getCustomer(),
+                    reopenWith.getProject(),
+                    reopenWith.getTask(),
+                    null,
+                    null
+                )
+                : showActivityDialog(i18n("activity.edit.title"), selected);
+            if (!input.isPresent()) {
+                return;
+            }
+            ActivityInput value = input.get();
+            Optional<ActivityInput> toApply = checkOverlapAndConfirm(value, selected);
+            if (toApply.isPresent()) {
+                ActivityInput adjusted = toApply.get();
+                selected.setCustomerId(adjusted.getCustomer().getId());
+                selected.setProjectId(adjusted.getProject().getId());
+                selected.setTaskId(adjusted.getTask().getId());
+                selected.setFrom(formatDateTime(adjusted.getFrom()));
+                selected.setTo(formatDateTime(adjusted.getTo()));
+                lastActivity = selected;
+                activityTable.refresh();
+                saveData();
+                applyFilters();
+                return;
+            }
+            reopenWith = value;
+        }
     }
 
     private void deleteActivity() {
@@ -2391,7 +2605,7 @@ public class MainController {
     }
 
     private Optional<ActivityInput> showActivityDialog(String title, Activity existing) {
-        return showActivityDialog(title, existing, null, null, null, null, null, null);
+        return showActivityDialog(title, existing, null, null, null, null, null, null, null);
     }
 
     private Optional<ActivityInput> showActivityDialog(
@@ -2402,7 +2616,8 @@ public class MainController {
         Customer defaultCustomer,
         Project defaultProject,
         Task defaultTask,
-        Function<Customer, DefaultProjectAndTask> defaultSelectionForCustomer
+        Function<Customer, DefaultProjectAndTask> defaultSelectionForCustomer,
+        java.util.function.BiFunction<Customer, Project, LocalDateTime[]> suggestedRangeForSelection
     ) {
         LocalDateTime fromDateTime = defaultFrom;
         LocalDateTime toDateTime = defaultTo;
@@ -2419,6 +2634,15 @@ public class MainController {
             }
             fromDateTime = Activity.parseStoredDateTime(existing.getFrom());
             toDateTime = Activity.parseStoredDateTime(existing.getTo());
+            if (defaultFrom != null && defaultTo != null) {
+                fromDateTime = defaultFrom;
+                toDateTime = defaultTo;
+            }
+            if (defaultCustomer != null && defaultProject != null && defaultTask != null) {
+                resolvedCustomer = defaultCustomer;
+                resolvedProject = defaultProject;
+                resolvedTask = defaultTask;
+            }
         }
         ActivityDialogView view = new ActivityDialogView(messages, currentLocale);
         return view.show(
@@ -2432,6 +2656,7 @@ public class MainController {
             settings.getTimeGridMinutes(),
             defaultSelectionForCustomer,
             this::getLastTaskForProject,
+            suggestedRangeForSelection,
             this::openManagementDialog,
             primaryStage
         );

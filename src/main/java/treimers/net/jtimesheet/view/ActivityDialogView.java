@@ -62,6 +62,7 @@ public class ActivityDialogView {
         int timeGridMinutes,
         Function<Customer, DefaultProjectAndTask> defaultSelectionForCustomer,
         BiFunction<Customer, Project, Task> defaultTaskForProject,
+        BiFunction<Customer, Project, LocalDateTime[]> suggestedRangeForSelection,
         Consumer<Window> onOpenManage,
         Window owner
     ) {
@@ -88,6 +89,33 @@ public class ActivityDialogView {
         durationTextField.setPrefWidth(80);
         durationTextField.setPromptText("0:00");
 
+        boolean[] updating = { false };
+
+        Runnable applySuggestedRange = () -> {
+            if (suggestedRangeForSelection == null) {
+                return;
+            }
+            Customer c = customerChoice.getSelectionModel().getSelectedItem();
+            LocalDateTime[] range = suggestedRangeForSelection.apply(c, projectChoice.getSelectionModel().getSelectedItem());
+            if (range == null || range.length != 2 || range[0] == null || range[1] == null || !range[0].isBefore(range[1])) {
+                return;
+            }
+            LocalDateTime from = alignToGrid(range[0], timeGridMinutes);
+            LocalDateTime to = alignToGrid(range[1], timeGridMinutes);
+            if (!from.isBefore(to)) {
+                return;
+            }
+            updating[0] = true;
+            try {
+                datePicker.setValue(from.toLocalDate());
+                setTimeSelection(fromHourChoice, fromMinuteChoice, from.getHour(), from.getMinute(), timeGridMinutes);
+                setTimeSelection(toHourChoice, toMinuteChoice, to.getHour(), to.getMinute(), timeGridMinutes);
+                durationTextField.setText(formatDuration(from, to));
+            } finally {
+                updating[0] = false;
+            }
+        };
+
         customerChoice.getSelectionModel().selectedItemProperty().addListener((obs, oldValue, newValue) -> {
             if (newValue == null) {
                 projectChoice.setItems(FXCollections.observableArrayList());
@@ -97,6 +125,7 @@ public class ActivityDialogView {
                 projectChoice.getSelectionModel().clearSelection();
                 taskChoice.setItems(FXCollections.observableArrayList());
                 if (newValue.getProjects().isEmpty()) {
+                    Platform.runLater(applySuggestedRange);
                     return;
                 }
                 DefaultProjectAndTask pt = (defaultSelectionForCustomer != null) ? defaultSelectionForCustomer.apply(newValue) : null;
@@ -118,8 +147,15 @@ public class ActivityDialogView {
                     projectChoice.getSelectionModel().select(projectToSelect);
                     if (taskToSelect != null) {
                         Task task = taskToSelect;
-                        Platform.runLater(() -> taskChoice.getSelectionModel().select(task));
+                        Platform.runLater(() -> {
+                            taskChoice.getSelectionModel().select(task);
+                            applySuggestedRange.run();
+                        });
+                    } else {
+                        Platform.runLater(applySuggestedRange);
                     }
+                } else {
+                    Platform.runLater(applySuggestedRange);
                 }
             }
         });
@@ -141,7 +177,12 @@ public class ActivityDialogView {
                 }
                 if (taskToSelect != null && newValue.getTasks().contains(taskToSelect)) {
                     Task task = taskToSelect;
-                    Platform.runLater(() -> taskChoice.getSelectionModel().select(task));
+                    Platform.runLater(() -> {
+                        taskChoice.getSelectionModel().select(task);
+                        applySuggestedRange.run();
+                    });
+                } else {
+                    Platform.runLater(applySuggestedRange);
                 }
             }
         });
@@ -213,7 +254,6 @@ public class ActivityDialogView {
 
         dialog.getDialogPane().setContent(grid);
 
-        boolean[] updating = { false };
         Runnable updateToFromDuration = () -> {
             if (updating[0]) {
                 return;
