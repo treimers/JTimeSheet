@@ -2178,6 +2178,11 @@ public class MainController {
     }
 
     private void openManagementDialog() {
+        openManagementDialog(primaryStage);
+    }
+
+    /** Opens the management dialog. When called from the Activity dialog, pass the activity dialog's window as owner so Manage is modal to it. */
+    private void openManagementDialog(javafx.stage.Window owner) {
         ManagementDialog dialog = new ManagementDialog(
             customers,
             this::saveData,
@@ -2216,7 +2221,7 @@ public class MainController {
             messages,
             currentLocale
         );
-        dialog.show(primaryStage);
+        dialog.show(owner != null ? owner : primaryStage);
         refreshFilterChoices();
     }
 
@@ -2373,6 +2378,8 @@ public class MainController {
             resolvedTask,
             settings.getTimeGridMinutes(),
             defaultSelectionForCustomer,
+            this::getLastTaskForProject,
+            this::openManagementDialog,
             primaryStage
         );
     }
@@ -2470,6 +2477,44 @@ public class MainController {
             }
         }
         return last;
+    }
+
+    /** Chronologically last activity for the given customer and project (by latest "to" time). */
+    private Activity findLastActivityForProject(String customerId, String projectId) {
+        if (customerId == null || projectId == null) {
+            return null;
+        }
+        Activity last = null;
+        LocalDateTime lastTo = null;
+        for (Activity a : activities) {
+            if (!customerId.equals(a.getCustomerId()) || !projectId.equals(a.getProjectId())) {
+                continue;
+            }
+            LocalDateTime to = Activity.parseStoredDateTime(a.getTo());
+            if (to == null) {
+                continue;
+            }
+            if (lastTo == null || to.isAfter(lastTo)) {
+                lastTo = to;
+                last = a;
+            }
+        }
+        return last;
+    }
+
+    /** Last task used for the given project (same customer context), or first task of the project. */
+    private Task getLastTaskForProject(Customer customer, Project project) {
+        if (customer == null || project == null) {
+            return null;
+        }
+        Activity last = findLastActivityForProject(customer.getId(), project.getId());
+        if (last != null) {
+            Task t = findTaskById(project, last.getTaskId());
+            if (t != null) {
+                return t;
+            }
+        }
+        return project.getTasks().isEmpty() ? null : project.getTasks().get(0);
     }
 
     /** Default customer for new activity: last activity's customer or first customer. */

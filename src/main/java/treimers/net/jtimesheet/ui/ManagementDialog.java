@@ -46,6 +46,7 @@ import javafx.scene.shape.SVGPath;
 import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import javafx.stage.Window;
 import treimers.net.jtimesheet.model.Customer;
 import treimers.net.jtimesheet.model.Project;
 import treimers.net.jtimesheet.model.Task;
@@ -91,7 +92,7 @@ public class ManagementDialog {
         this.locale = locale;
     }
 
-    public void show(Stage owner) {
+    public void show(Window owner) {
         ensureManagementTree();
 
         MenuBar menuBar = new MenuBar(
@@ -156,7 +157,9 @@ public class ManagementDialog {
         BorderPane.setMargin(content, new Insets(10));
 
         dialogStage = new Stage();
-        dialogStage.initOwner(owner);
+        if (owner != null) {
+            dialogStage.initOwner(owner);
+        }
         dialogStage.initModality(Modality.APPLICATION_MODAL);
         dialogStage.setTitle(i18n("management.title"));
         Scene scene = new Scene(root, 1160, 760);

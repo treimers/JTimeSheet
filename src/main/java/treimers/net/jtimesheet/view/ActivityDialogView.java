@@ -9,7 +9,12 @@ import java.util.Locale;
 import java.util.MissingResourceException;
 import java.util.Optional;
 import java.util.ResourceBundle;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
+
+import javafx.application.Platform;
+import javafx.scene.control.Button;
 
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -26,8 +31,9 @@ import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.GridPane;
-import javafx.stage.Window;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.stage.Window;
 import treimers.net.jtimesheet.model.Activity;
 import treimers.net.jtimesheet.model.AppSettings;
 import treimers.net.jtimesheet.model.Customer;
@@ -55,6 +61,8 @@ public class ActivityDialogView {
         Task defaultTask,
         int timeGridMinutes,
         Function<Customer, DefaultProjectAndTask> defaultSelectionForCustomer,
+        BiFunction<Customer, Project, Task> defaultTaskForProject,
+        Consumer<Window> onOpenManage,
         Window owner
     ) {
         Dialog<ActivityInput> dialog = new Dialog<>();
@@ -88,21 +96,29 @@ public class ActivityDialogView {
                 projectChoice.setItems(FXCollections.observableArrayList(newValue.getProjects()));
                 projectChoice.getSelectionModel().clearSelection();
                 taskChoice.setItems(FXCollections.observableArrayList());
-                if (defaultSelectionForCustomer != null) {
-                    DefaultProjectAndTask pt = defaultSelectionForCustomer.apply(newValue);
-                    if (pt != null && pt.getProject() != null && newValue.getProjects().contains(pt.getProject())) {
-                        projectChoice.getSelectionModel().select(pt.getProject());
-                        if (pt.getTask() != null && pt.getProject().getTasks().contains(pt.getTask())) {
-                            taskChoice.getSelectionModel().select(pt.getTask());
-                        } else if (!pt.getProject().getTasks().isEmpty()) {
-                            taskChoice.getSelectionModel().select(pt.getProject().getTasks().get(0));
-                        }
-                    } else if (!newValue.getProjects().isEmpty()) {
-                        Project firstProject = newValue.getProjects().get(0);
-                        projectChoice.getSelectionModel().select(firstProject);
-                        if (!firstProject.getTasks().isEmpty()) {
-                            taskChoice.getSelectionModel().select(firstProject.getTasks().get(0));
-                        }
+                if (newValue.getProjects().isEmpty()) {
+                    return;
+                }
+                DefaultProjectAndTask pt = (defaultSelectionForCustomer != null) ? defaultSelectionForCustomer.apply(newValue) : null;
+                Project projectToSelect = null;
+                Task taskToSelect = null;
+                if (pt != null && pt.getProject() != null && newValue.getProjects().contains(pt.getProject())) {
+                    projectToSelect = pt.getProject();
+                    if (pt.getTask() != null && pt.getProject().getTasks().contains(pt.getTask())) {
+                        taskToSelect = pt.getTask();
+                    } else if (!pt.getProject().getTasks().isEmpty()) {
+                        taskToSelect = pt.getProject().getTasks().get(0);
+                    }
+                } else {
+                    Project firstProject = newValue.getProjects().get(0);
+                    projectToSelect = firstProject;
+                    taskToSelect = firstProject.getTasks().isEmpty() ? null : firstProject.getTasks().get(0);
+                }
+                if (projectToSelect != null) {
+                    projectChoice.getSelectionModel().select(projectToSelect);
+                    if (taskToSelect != null) {
+                        Task task = taskToSelect;
+                        Platform.runLater(() -> taskChoice.getSelectionModel().select(task));
                     }
                 }
             }
@@ -113,8 +129,21 @@ public class ActivityDialogView {
                 taskChoice.setItems(FXCollections.observableArrayList());
             } else {
                 taskChoice.setItems(newValue.getTasks());
+                Task taskToSelect = null;
+                if (defaultTaskForProject != null) {
+                    Customer customer = customerChoice.getSelectionModel().getSelectedItem();
+                    if (customer != null) {
+                        taskToSelect = defaultTaskForProject.apply(customer, newValue);
+                    }
+                }
+                if (taskToSelect == null && !newValue.getTasks().isEmpty()) {
+                    taskToSelect = newValue.getTasks().get(0);
+                }
+                if (taskToSelect != null && newValue.getTasks().contains(taskToSelect)) {
+                    Task task = taskToSelect;
+                    Platform.runLater(() -> taskChoice.getSelectionModel().select(task));
+                }
             }
-            taskChoice.getSelectionModel().clearSelection();
         });
 
         LocalDateTime fromDateTime = defaultFrom;
@@ -151,7 +180,24 @@ public class ActivityDialogView {
         grid.setPadding(new Insets(20, 150, 10, 10));
 
         grid.add(new Label(i18n("activity.field.customer")), 0, 0);
-        grid.add(customerChoice, 1, 0);
+        HBox customerRow = new HBox(10);
+        customerRow.getChildren().add(customerChoice);
+        HBox.setHgrow(customerChoice, Priority.ALWAYS);
+        if (onOpenManage != null) {
+            Button manageButton = new Button(i18n("menu.manage.open"));
+            manageButton.setOnAction(e -> {
+                Customer selCustomer = customerChoice.getSelectionModel().getSelectedItem();
+                Project selProject = projectChoice.getSelectionModel().getSelectedItem();
+                Task selTask = taskChoice.getSelectionModel().getSelectedItem();
+                String customerId = selCustomer != null ? selCustomer.getId() : null;
+                String projectId = selProject != null ? selProject.getId() : null;
+                String taskId = selTask != null ? selTask.getId() : null;
+                onOpenManage.accept(dialog.getDialogPane().getScene().getWindow());
+                refreshChoicesAfterManage(customers, customerChoice, projectChoice, taskChoice, customerId, projectId, taskId);
+            });
+            customerRow.getChildren().add(manageButton);
+        }
+        grid.add(customerRow, 1, 0);
         grid.add(new Label(i18n("activity.field.project")), 0, 1);
         grid.add(projectChoice, 1, 1);
         grid.add(new Label(i18n("activity.field.task")), 0, 2);
@@ -262,6 +308,81 @@ public class ActivityDialogView {
         });
 
         return dialog.showAndWait();
+    }
+
+    /** Refreshes customer/project/task choice boxes after Manage dialog closed (e.g. new entries added). Restores selection by id when possible. */
+    private void refreshChoicesAfterManage(
+        ObservableList<Customer> customers,
+        ChoiceBox<Customer> customerChoice,
+        ChoiceBox<Project> projectChoice,
+        ChoiceBox<Task> taskChoice,
+        String selectedCustomerId,
+        String selectedProjectId,
+        String selectedTaskId
+    ) {
+        customerChoice.setItems(customers);
+        Customer customer = findCustomerById(customers, selectedCustomerId);
+        if (customer != null) {
+            customerChoice.getSelectionModel().select(customer);
+            projectChoice.setItems(FXCollections.observableArrayList(customer.getProjects()));
+            Project project = findProjectById(customer, selectedProjectId);
+            if (project != null) {
+                projectChoice.getSelectionModel().select(project);
+                taskChoice.setItems(project.getTasks());
+                Task task = findTaskById(project, selectedTaskId);
+                if (task != null) {
+                    taskChoice.getSelectionModel().select(task);
+                } else if (!project.getTasks().isEmpty()) {
+                    taskChoice.getSelectionModel().selectFirst();
+                }
+            } else if (!customer.getProjects().isEmpty()) {
+                projectChoice.getSelectionModel().selectFirst();
+                Project first = customer.getProjects().get(0);
+                taskChoice.setItems(first.getTasks());
+                if (!first.getTasks().isEmpty()) {
+                    taskChoice.getSelectionModel().selectFirst();
+                }
+            }
+        } else {
+            projectChoice.setItems(FXCollections.observableArrayList());
+            taskChoice.setItems(FXCollections.observableArrayList());
+        }
+    }
+
+    private static Customer findCustomerById(ObservableList<Customer> customers, String id) {
+        if (id == null) {
+            return null;
+        }
+        for (Customer c : customers) {
+            if (id.equals(c.getId())) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    private static Project findProjectById(Customer customer, String id) {
+        if (customer == null || id == null) {
+            return null;
+        }
+        for (Project p : customer.getProjects()) {
+            if (id.equals(p.getId())) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    private static Task findTaskById(Project project, String id) {
+        if (project == null || id == null) {
+            return null;
+        }
+        for (Task t : project.getTasks()) {
+            if (id.equals(t.getId())) {
+                return t;
+            }
+        }
+        return null;
     }
 
     private ActivityInput validateActivityInput(
