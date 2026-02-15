@@ -111,6 +111,7 @@ import treimers.net.jtimesheet.ui.ActivityInput;
 import treimers.net.jtimesheet.ui.DefaultProjectAndTask;
 import treimers.net.jtimesheet.ui.ManagementDialog;
 import treimers.net.jtimesheet.view.ActivityDialogView;
+import treimers.net.jtimesheet.view.PauseDialogView;
 import treimers.net.jtimesheet.view.MainView;
 import treimers.net.jtimesheet.view.SettingsDialogView;
 
@@ -160,6 +161,7 @@ public class MainController {
     private MenuItem settingsMenuItem;
     private MenuItem contextAddActivityItem;
     private MenuItem contextEditActivityItem;
+    private MenuItem contextAddPauseItem;
     private MenuItem contextDeleteActivityItem;
     private Button writeTimesheetButton;
     private Label totalHoursLabel;
@@ -605,10 +607,13 @@ public class MainController {
         contextEditActivityItem = menuItemWithIcon(i18n("menu.activity.edit"), "edit", this::editActivity);
         contextEditActivityItem.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
 
+        contextAddPauseItem = menuItemWithIcon(i18n("menu.activity.addPause"), "add", this::addPause);
+        contextAddPauseItem.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+
         contextDeleteActivityItem = menuItemWithIcon(i18n("menu.activity.delete"), "delete", this::deleteActivity);
         contextDeleteActivityItem.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
 
-        ContextMenu menu = new ContextMenu(contextAddActivityItem, contextEditActivityItem, contextDeleteActivityItem);
+        ContextMenu menu = new ContextMenu(contextAddActivityItem, contextEditActivityItem, contextAddPauseItem, contextDeleteActivityItem);
         table.setContextMenu(menu);
 
         table.setRowFactory(tv -> {
@@ -2330,6 +2335,54 @@ public class MainController {
         }
     }
 
+    private void addPause() {
+        Activity selected = getSelectedActivity();
+        if (selected == null) {
+            showInfo(i18n("activity.delete.select"));
+            return;
+        }
+        LocalDateTime from = Activity.parseStoredDateTime(selected.getFrom());
+        LocalDateTime to = Activity.parseStoredDateTime(selected.getTo());
+        if (from == null || to == null || !from.isBefore(to)) {
+            showInfo(i18n("activity.pause.validation.within"));
+            return;
+        }
+        PauseDialogView pauseView = new PauseDialogView(messages, currentLocale);
+        Optional<LocalDateTime[]> result = pauseView.show(from, to, settings.getTimeGridMinutes(), primaryStage);
+        if (!result.isPresent()) {
+            return;
+        }
+        LocalDateTime pauseStart = result.get()[0];
+        LocalDateTime pauseEnd = result.get()[1];
+        int index = activities.indexOf(selected);
+        Activity firstPart = new Activity(
+            selected.getCustomerId(),
+            selected.getProjectId(),
+            selected.getTaskId(),
+            Activity.formatDateTime(from),
+            Activity.formatDateTime(pauseStart)
+        );
+        Activity secondPart = new Activity(
+            selected.getCustomerId(),
+            selected.getProjectId(),
+            selected.getTaskId(),
+            Activity.formatDateTime(pauseEnd),
+            Activity.formatDateTime(to)
+        );
+        activities.remove(selected);
+        activities.add(index, firstPart);
+        activities.add(index + 1, secondPart);
+        if (selected == lastActivity) {
+            lastActivity = secondPart;
+        }
+        saveData();
+        applyFilters();
+        if (activityTable != null) {
+            activityTable.getSelectionModel().select(secondPart);
+            activityTable.refresh();
+        }
+    }
+
     private Activity getSelectedActivity() {
         if (activityTable == null) {
             return null;
@@ -2964,6 +3017,9 @@ public class MainController {
         }
         if (contextEditActivityItem != null) {
             contextEditActivityItem.setText(i18n("menu.activity.edit"));
+        }
+        if (contextAddPauseItem != null) {
+            contextAddPauseItem.setText(i18n("menu.activity.addPause"));
         }
         if (contextDeleteActivityItem != null) {
             contextDeleteActivityItem.setText(i18n("menu.activity.delete"));
