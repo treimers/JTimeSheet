@@ -10,17 +10,16 @@ public class Customer {
     private String address;
     private String timesheetTemplatePath;
     private String timesheetFilenameSuggestion;
-    private String timesheetRounding;
     private String timesheetSheetNo;
     private String timesheetTaskSeparator;
     private final List<Project> projects = new ArrayList<>();
 
     public Customer(String name) {
-        this(UUID.randomUUID().toString(), name, "", "", "", "", "0", ",");
+        this(UUID.randomUUID().toString(), name, "", "", "", "0", ",");
     }
 
     public Customer(String id, String name) {
-        this(id, name, "", "", "", "", "0", ",");
+        this(id, name, "", "", "", "0", ",");
     }
 
     public Customer(
@@ -29,7 +28,6 @@ public class Customer {
         String address,
         String timesheetTemplatePath,
         String timesheetFilenameSuggestion,
-        String timesheetRounding,
         String timesheetSheetNo,
         String timesheetTaskSeparator
     ) {
@@ -38,7 +36,6 @@ public class Customer {
         this.address = safeValue(address);
         this.timesheetTemplatePath = safeValue(timesheetTemplatePath);
         this.timesheetFilenameSuggestion = safeValue(timesheetFilenameSuggestion);
-        this.timesheetRounding = safeValue(timesheetRounding);
         this.timesheetSheetNo = safeValue(timesheetSheetNo);
         this.timesheetTaskSeparator = safeValue(timesheetTaskSeparator);
     }
@@ -77,14 +74,6 @@ public class Customer {
 
     public void setTimesheetFilenameSuggestion(String value) {
         this.timesheetFilenameSuggestion = value != null ? value : "";
-    }
-
-    public String getTimesheetRounding() {
-        return timesheetRounding;
-    }
-
-    public void setTimesheetRounding(String value) {
-        this.timesheetRounding = value != null ? value : "";
     }
 
     public String getTimesheetSheetNo() {

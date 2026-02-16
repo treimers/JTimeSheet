@@ -16,6 +16,7 @@ public class AppSettings {
     private LocalTime reminderStartTime = LocalTime.of(9, 0);
     private LocalTime reminderEndTime = LocalTime.of(17, 0);
     private Set<DayOfWeek> reminderWeekdays = EnumSet.range(DayOfWeek.MONDAY, DayOfWeek.FRIDAY);
+    private DayOfWeek firstDayOfWeek = DayOfWeek.MONDAY;
     private String dataDirectory = DEFAULT_DATA_DIRECTORY;
 
     public int getTimeGridMinutes() {
@@ -68,6 +69,14 @@ public class AppSettings {
         reminderWeekdays = (weekdays == null || weekdays.isEmpty())
             ? EnumSet.range(DayOfWeek.MONDAY, DayOfWeek.FRIDAY)
             : EnumSet.copyOf(weekdays);
+    }
+
+    public DayOfWeek getFirstDayOfWeek() {
+        return firstDayOfWeek != null ? firstDayOfWeek : DayOfWeek.MONDAY;
+    }
+
+    public void setFirstDayOfWeek(DayOfWeek value) {
+        firstDayOfWeek = (value != null) ? value : DayOfWeek.MONDAY;
     }
 
     public String getDataDirectory() {

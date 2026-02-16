@@ -762,7 +762,7 @@ public class MainController {
         calendarView.getCalendarSources().add(calendarSource);
         calendarView.setShowAddCalendarButton(false);
         calendarView.setRequestedTime(LocalTime.now());
-        calendarView.setWeekFields(WeekFields.of(currentLocale));
+        calendarView.setWeekFields(WeekFields.of(settings.getFirstDayOfWeek(), 1));
         restoreCalendarPreferences(calendarView);
         calendarView.selectedPageProperty().addListener((obs, oldPage, newPage) -> saveCalendarPagePreference(newPage));
         Thread updateTimeThread = new Thread("Calendar: Update Time") {
@@ -1262,12 +1262,14 @@ public class MainController {
                     viewFrom.setValue(y); viewTo.setValue(y); state.setFromDate(y); state.setToDate(y);
                 }
                 case THIS_WEEK -> {
-                    LocalDate start = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                    DayOfWeek firstDay = settings.getFirstDayOfWeek();
+                    LocalDate start = today.with(TemporalAdjusters.previousOrSame(firstDay));
                     LocalDate end = start.plusDays(6);
                     viewFrom.setValue(start); viewTo.setValue(end); state.setFromDate(start); state.setToDate(end);
                 }
                 case LAST_WEEK -> {
-                    LocalDate start = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).minusWeeks(1);
+                    DayOfWeek firstDay = settings.getFirstDayOfWeek();
+                    LocalDate start = today.with(TemporalAdjusters.previousOrSame(firstDay)).minusWeeks(1);
                     LocalDate end = start.plusDays(6);
                     viewFrom.setValue(start); viewTo.setValue(end); state.setFromDate(start); state.setToDate(end);
                 }
@@ -1789,14 +1791,16 @@ public class MainController {
                 toFilter.setValue(yesterday);
                 break;
             case THIS_WEEK: {
-                LocalDate start = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                DayOfWeek firstDay = settings.getFirstDayOfWeek();
+                LocalDate start = today.with(TemporalAdjusters.previousOrSame(firstDay));
                 LocalDate end = start.plusDays(6);
                 fromFilter.setValue(start);
                 toFilter.setValue(end);
                 break;
             }
             case LAST_WEEK: {
-                LocalDate start = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).minusWeeks(1);
+                DayOfWeek firstDay = settings.getFirstDayOfWeek();
+                LocalDate start = today.with(TemporalAdjusters.previousOrSame(firstDay)).minusWeeks(1);
                 LocalDate end = start.plusDays(6);
                 fromFilter.setValue(start);
                 toFilter.setValue(end);
@@ -2831,9 +2835,13 @@ public class MainController {
             settings.setReminderIntervalMinutes(values.getReminderIntervalMinutes());
             settings.setReminderWindow(values.getReminderStart(), values.getReminderEnd());
             settings.setReminderWeekdays(values.getReminderWeekdays());
+            settings.setFirstDayOfWeek(values.getFirstDayOfWeek());
             settings.setLanguage(values.getLanguage());
             settings.setDataDirectory(values.getDataDirectory());
             settingsService.save(settings);
+            if (calendarViewNode instanceof CalendarView cv) {
+                cv.setWeekFields(WeekFields.of(settings.getFirstDayOfWeek(), 1));
+            }
             saveData();
             applyLanguage();
             startReminderScheduler();
@@ -3569,7 +3577,6 @@ public class MainController {
                         customerData.address,
                         customerData.timesheetTemplatePath,
                         customerData.timesheetFilenameSuggestion,
-                        customerData.timesheetRounding,
                         customerData.timesheetSheetNo,
                         customerData.timesheetTaskSeparator
                     );
@@ -3627,7 +3634,6 @@ public class MainController {
             customerData.address = customer.getAddress();
             customerData.timesheetTemplatePath = customer.getTimesheetTemplatePath();
             customerData.timesheetFilenameSuggestion = customer.getTimesheetFilenameSuggestion();
-            customerData.timesheetRounding = customer.getTimesheetRounding();
             customerData.timesheetSheetNo = customer.getTimesheetSheetNo();
             customerData.timesheetTaskSeparator = customer.getTimesheetTaskSeparator();
             customerData.projects = new ArrayList<>();

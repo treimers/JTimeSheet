@@ -190,6 +190,31 @@ public class SettingsDialogView {
             weekdaysBox.getChildren().add(cb);
         }
 
+        ComboBox<DayOfWeek> firstDayOfWeekChoice = new ComboBox<>(FXCollections.observableArrayList(DayOfWeek.values()));
+        firstDayOfWeekChoice.getSelectionModel().select(settings.getFirstDayOfWeek());
+        firstDayOfWeekChoice.setCellFactory(listView -> new ListCell<>() {
+            @Override
+            protected void updateItem(DayOfWeek item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    return;
+                }
+                setText(item.getDisplayName(TextStyle.FULL_STANDALONE, locale));
+            }
+        });
+        firstDayOfWeekChoice.setConverter(new StringConverter<>() {
+            @Override
+            public String toString(DayOfWeek value) {
+                return value == null ? "" : value.getDisplayName(TextStyle.FULL_STANDALONE, locale);
+            }
+
+            @Override
+            public DayOfWeek fromString(String string) {
+                return settings.getFirstDayOfWeek();
+            }
+        });
+
         ComboBox<Language> languageChoice = new ComboBox<>(FXCollections.observableArrayList(Language.ENGLISH, Language.GERMAN));
         languageChoice.getSelectionModel().select(settings.getLanguage());
         languageChoice.setCellFactory(listView -> new ListCell<>() {
@@ -249,10 +274,12 @@ public class SettingsDialogView {
         grid.add(reminderEndChoice, 1, 3);
         grid.add(new Label(i18n("settings.reminder.weekdays.label")), 0, 4);
         grid.add(weekdaysBox, 1, 4);
-        grid.add(new Label(i18n("settings.language.label")), 0, 5);
-        grid.add(languageChoice, 1, 5);
-        grid.add(new Label(i18n("settings.dataFolder.label")), 0, 6);
-        grid.add(dataDirectoryBox, 1, 6);
+        grid.add(new Label(i18n("settings.firstDayOfWeek.label")), 0, 5);
+        grid.add(firstDayOfWeekChoice, 1, 5);
+        grid.add(new Label(i18n("settings.language.label")), 0, 6);
+        grid.add(languageChoice, 1, 6);
+        grid.add(new Label(i18n("settings.dataFolder.label")), 0, 7);
+        grid.add(dataDirectoryBox, 1, 7);
 
         dialog.getDialogPane().setContent(grid);
         dialog.setResultConverter(button -> button == saveButton ? button : null);
@@ -285,6 +312,7 @@ public class SettingsDialogView {
             reminderStartChoice.getValue(),
             reminderEndChoice.getValue(),
             selectedWeekdays,
+            firstDayOfWeekChoice.getValue(),
             languageChoice.getValue(),
             dataDirectoryField.getText()
         ));
@@ -353,6 +381,7 @@ public class SettingsDialogView {
         private final LocalTime reminderStart;
         private final LocalTime reminderEnd;
         private final Set<DayOfWeek> reminderWeekdays;
+        private final DayOfWeek firstDayOfWeek;
         private final Language language;
         private final String dataDirectory;
 
@@ -362,6 +391,7 @@ public class SettingsDialogView {
             LocalTime reminderStart,
             LocalTime reminderEnd,
             Set<DayOfWeek> reminderWeekdays,
+            DayOfWeek firstDayOfWeek,
             Language language,
             String dataDirectory
         ) {
@@ -370,6 +400,7 @@ public class SettingsDialogView {
             this.reminderStart = reminderStart;
             this.reminderEnd = reminderEnd;
             this.reminderWeekdays = reminderWeekdays;
+            this.firstDayOfWeek = firstDayOfWeek != null ? firstDayOfWeek : DayOfWeek.MONDAY;
             this.language = language;
             this.dataDirectory = dataDirectory;
         }
@@ -392,6 +423,10 @@ public class SettingsDialogView {
 
         public Set<DayOfWeek> getReminderWeekdays() {
             return reminderWeekdays;
+        }
+
+        public DayOfWeek getFirstDayOfWeek() {
+            return firstDayOfWeek;
         }
 
         public Language getLanguage() {

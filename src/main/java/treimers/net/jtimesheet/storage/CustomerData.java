@@ -9,7 +9,6 @@ public class CustomerData {
     public String address;
     public String timesheetTemplatePath;
     public String timesheetFilenameSuggestion;
-    public String timesheetRounding;
     public String timesheetSheetNo;
     public String timesheetTaskSeparator;
     public List<ProjectData> projects = new ArrayList<>();
