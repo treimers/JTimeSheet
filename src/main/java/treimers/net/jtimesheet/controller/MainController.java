@@ -215,6 +215,15 @@ public class MainController {
     private final List<ViewTabState> viewTabStates = new ArrayList<>();
     private boolean restoringViewTabs;
     private Stage helpDialog;
+    /** Holder for dynamic view tab: state + table so the tab shows filter panel and activity table. */
+    private static class ViewTabData {
+        final ViewTabState state;
+        final TableView<Activity> table;
+        ViewTabData(ViewTabState state, TableView<Activity> table) {
+            this.state = state;
+            this.table = table;
+        }
+    }
     private HostServices hostServices;
 
     public MainController() {
@@ -275,8 +284,8 @@ public class MainController {
                 if (c.wasRemoved()) {
                     for (Tab tab : c.getRemoved()) {
                         Object ud = tab.getUserData();
-                        if (ud instanceof ViewTabState) {
-                            viewTabStates.remove(ud);
+                        if (ud instanceof ViewTabData) {
+                            viewTabStates.remove(((ViewTabData) ud).state);
                         }
                     }
                     if (!restoringViewTabs) {
@@ -647,6 +656,77 @@ public class MainController {
         ContextMenu menu = new ContextMenu(contextAddActivityItem, contextEditActivityItem, contextAddPauseItem, contextDeleteActivityItem);
         table.setContextMenu(menu);
 
+        table.setRowFactory(tv -> {
+            TableRow<Activity> row = new TableRow<>();
+            row.setContextMenu(menu);
+            row.setOnMousePressed(event -> {
+                if (event.getButton() == MouseButton.SECONDARY && !row.isEmpty()) {
+                    table.getSelectionModel().select(row.getIndex());
+                }
+            });
+            row.setOnMouseClicked(event -> {
+                if (event.getButton() == MouseButton.PRIMARY && event.getClickCount() == 2 && !row.isEmpty()) {
+                    editActivity();
+                }
+            });
+            return row;
+        });
+        return table;
+    }
+
+    /** Creates a TableView for a dynamic view tab: same columns and data as main table, own context menu. */
+    private TableView<Activity> createViewActivityTable() {
+        TableView<Activity> table = new TableView<>(filteredActivities);
+        TableColumn<Activity, String> colCustomer = new TableColumn<>(i18n("table.customer"));
+        colCustomer.setCellValueFactory(cell ->
+            new SimpleStringProperty(resolveCustomerName(cell.getValue().getCustomerId())));
+        TableColumn<Activity, String> colProject = new TableColumn<>(i18n("table.project"));
+        colProject.setCellValueFactory(cell ->
+            new SimpleStringProperty(resolveProjectName(cell.getValue().getProjectId())));
+        TableColumn<Activity, String> colTask = new TableColumn<>(i18n("table.task"));
+        colTask.setCellValueFactory(cell ->
+            new SimpleStringProperty(resolveTaskName(cell.getValue().getTaskId())));
+        TableColumn<Activity, String> colFrom = new TableColumn<>(i18n("table.from"));
+        colFrom.setCellValueFactory(cell -> cell.getValue().fromProperty());
+        TableColumn<Activity, String> colTo = new TableColumn<>(i18n("table.to"));
+        colTo.setCellValueFactory(cell -> cell.getValue().toProperty());
+        TableColumn<Activity, String> colDuration = new TableColumn<>(i18n("table.duration"));
+        colDuration.setCellValueFactory(cell -> cell.getValue().durationProperty());
+        TableColumn<Activity, String> colDailyTotal = new TableColumn<>(i18n("table.dailyTotal"));
+        colDailyTotal.setCellFactory(column -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || getTableRow() == null) {
+                    setText(null);
+                    return;
+                }
+                Activity activity = getTableRow().getItem();
+                if (activity == null) {
+                    setText(null);
+                    return;
+                }
+                setText(getDailyTotalText(activity));
+            }
+        });
+        table.getColumns().add(colCustomer);
+        table.getColumns().add(colProject);
+        table.getColumns().add(colTask);
+        table.getColumns().add(colFrom);
+        table.getColumns().add(colTo);
+        table.getColumns().add(colDuration);
+        table.getColumns().add(colDailyTotal);
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+
+        MenuItem addItem = menuItemWithIcon(i18n("menu.activity.add"), "add", this::addActivity);
+        MenuItem editItem = menuItemWithIcon(i18n("menu.activity.edit"), "edit", this::editActivity);
+        editItem.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+        MenuItem pauseItem = menuItemWithIcon(i18n("menu.activity.addPause"), "add", this::addPause);
+        pauseItem.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+        MenuItem deleteItem = menuItemWithIcon(i18n("menu.activity.delete"), "delete", this::deleteActivity);
+        deleteItem.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+        ContextMenu menu = new ContextMenu(addItem, editItem, pauseItem, deleteItem);
+        table.setContextMenu(menu);
         table.setRowFactory(tv -> {
             TableRow<Activity> row = new TableRow<>();
             row.setContextMenu(menu);
@@ -1275,10 +1355,14 @@ public class MainController {
         }
         ViewTabState newState = new ViewTabState(level, selectedCustomer, selectedProject, selectedTask);
         viewTabStates.add(newState);
+        TableView<Activity> viewTable = createViewActivityTable();
+        ViewTabData tabData = new ViewTabData(newState, viewTable);
         Tab tab = new Tab(newState.getTabTitle());
-        tab.setUserData(newState);
+        tab.setUserData(tabData);
         tab.setClosable(true);
-        tab.setContent(createViewFilterPanel(newState));
+        VBox viewContent = new VBox(10, createViewFilterPanel(newState), viewTable);
+        VBox.setVgrow(viewTable, Priority.ALWAYS);
+        tab.setContent(viewContent);
         viewTabPane.getTabs().add(tab);
         viewTabPane.getSelectionModel().select(tab);
         applyFilters();
@@ -1564,10 +1648,14 @@ public class MainController {
             state.setPresetKey(presetStr);
 
             viewTabStates.add(state);
+            TableView<Activity> viewTable = createViewActivityTable();
+            ViewTabData tabData = new ViewTabData(state, viewTable);
             Tab tab = new Tab(state.getTabTitle());
-            tab.setUserData(state);
+            tab.setUserData(tabData);
             tab.setClosable(true);
-            tab.setContent(createViewFilterPanel(state));
+            VBox viewContent = new VBox(10, createViewFilterPanel(state), viewTable);
+            VBox.setVgrow(viewTable, Priority.ALWAYS);
+            tab.setContent(viewContent);
             viewTabPane.getTabs().add(tab);
         }
         int selectedIndex = preferences.getInt("view.selectedIndex", 0);
@@ -1716,9 +1804,7 @@ public class MainController {
             return true;
         });
         recomputeDailyTotals();
-        if (activityTable != null) {
-            activityTable.refresh();
-        }
+        refreshAllActivityTables();
     }
 
     private void consolidateFilteredActivities() {
@@ -1951,41 +2037,62 @@ public class MainController {
 
     private LocalDateTime nextReminderTime(LocalDateTime now) {
         int interval = AppSettings.normalizeReminderIntervalMinutes(settings.getReminderIntervalMinutes());
+        int timeGridMinutes = AppSettings.normalizeTimeGridMinutes(settings.getTimeGridMinutes());
         LocalTime start = settings.getReminderStartTime();
         LocalTime end = settings.getReminderEndTime();
         Set<DayOfWeek> weekdays = settings.getReminderWeekdays();
-        LocalDateTime candidate = alignToReminderInterval(now, interval);
+        LocalDateTime candidate = alignToReminderInterval(now, interval, timeGridMinutes);
 
         while (true) {
             LocalDate date = candidate.toLocalDate();
             if (!weekdays.contains(date.getDayOfWeek())) {
-                candidate = alignToReminderInterval(LocalDateTime.of(date.plusDays(1), start), interval);
+                candidate = alignToReminderInterval(LocalDateTime.of(date.plusDays(1), start), interval, timeGridMinutes);
                 continue;
             }
             LocalDateTime windowStart = LocalDateTime.of(date, start);
             LocalDateTime windowEnd = LocalDateTime.of(date, end);
             if (candidate.isBefore(windowStart)) {
-                candidate = alignToReminderInterval(windowStart, interval);
+                candidate = alignToReminderInterval(windowStart, interval, timeGridMinutes);
             }
             if (candidate.isAfter(windowEnd)) {
-                candidate = alignToReminderInterval(LocalDateTime.of(date.plusDays(1), start), interval);
+                candidate = alignToReminderInterval(LocalDateTime.of(date.plusDays(1), start), interval, timeGridMinutes);
                 continue;
             }
             return candidate;
         }
     }
 
-    private LocalDateTime alignToReminderInterval(LocalDateTime time, int interval) {
+    /**
+     * Aligns time to the next boundary that fits both the reminder interval and the time grid
+     * (e.g. interval 30 min, grid 15 min → :00, :30).
+     */
+    private LocalDateTime alignToReminderInterval(LocalDateTime time, int interval, int timeGridMinutes) {
+        int step = lcm(interval, timeGridMinutes);
         LocalDateTime base = time.truncatedTo(ChronoUnit.MINUTES);
         if (time.isAfter(base)) {
             base = base.plusMinutes(1);
         }
         int minute = base.getMinute();
-        int mod = minute % interval;
+        int mod = minute % step;
         if (mod != 0) {
-            base = base.plusMinutes(interval - mod);
+            base = base.plusMinutes(step - mod);
         }
         return base;
+    }
+
+    private static int lcm(int a, int b) {
+        return Math.abs(a * b) / gcd(a, b);
+    }
+
+    private static int gcd(int a, int b) {
+        a = Math.abs(a);
+        b = Math.abs(b);
+        while (b != 0) {
+            int t = b;
+            b = a % b;
+            a = t;
+        }
+        return a;
     }
 
     /** Opens the add activity dialog with shared defaults (last or first customer/project/task). If overlap is found and user cancels the overlap dialog, the add dialog is shown again with the same values. */
@@ -2006,7 +2113,8 @@ public class MainController {
                 reopenWith != null ? reopenWith.getProject() : defaultProject,
                 reopenWith != null ? reopenWith.getTask() : defaultTask,
                 this::getLastProjectAndTaskForCustomer,
-                this::suggestedPromptRangeForSelection
+                this::suggestedPromptRangeForSelection,
+                settings.getReminderIntervalMinutes()
             );
             if (!input.isPresent()) {
                 return;
@@ -2023,11 +2131,14 @@ public class MainController {
 
     /**
      * Suggested time range for new activity: if the given customer (and optional project) had an activity ending today,
-     * use that end as start and now as end; otherwise now-1h to now.
+     * use that end as start and now as end; otherwise now-1h to now. From/to are aligned to the time grid;
+     * end time is always current time (aligned to grid).
      */
     private LocalDateTime[] suggestedPromptRange(LocalDateTime now, Customer customer, Project project) {
-        LocalDateTime from = now.minusHours(1);
-        LocalDateTime to = now;
+        int timeGridMinutes = AppSettings.normalizeTimeGridMinutes(settings.getTimeGridMinutes());
+        LocalDateTime nowOnGrid = alignToTimeGrid(now, timeGridMinutes);
+        LocalDateTime from = nowOnGrid.minusHours(1);
+        LocalDateTime to = nowOnGrid;
         Activity last = null;
         if (customer != null) {
             last = project != null
@@ -2037,8 +2148,9 @@ public class MainController {
         if (last == null && customer == null && lastActivity != null) {
             LocalDateTime lastTo = Activity.parseStoredDateTime(lastActivity.getTo());
             if (lastTo != null && lastTo.toLocalDate().equals(now.toLocalDate())) {
+                lastTo = alignToTimeGrid(lastTo, timeGridMinutes);
                 from = lastTo;
-                to = now.isBefore(lastTo) ? lastTo.plusHours(1) : now;
+                to = nowOnGrid.isBefore(lastTo) ? lastTo.plusHours(1) : nowOnGrid;
             }
             if (from.isAfter(to)) {
                 to = from.plusHours(1);
@@ -2048,14 +2160,26 @@ public class MainController {
         if (last != null) {
             LocalDateTime lastTo = Activity.parseStoredDateTime(last.getTo());
             if (lastTo != null && lastTo.toLocalDate().equals(now.toLocalDate())) {
+                lastTo = alignToTimeGrid(lastTo, timeGridMinutes);
                 from = lastTo;
-                to = now.isBefore(lastTo) ? lastTo.plusHours(1) : now;
+                to = nowOnGrid.isBefore(lastTo) ? lastTo.plusHours(1) : nowOnGrid;
             }
         }
         if (from.isAfter(to)) {
             to = from.plusHours(1);
         }
         return new LocalDateTime[] { from, to };
+    }
+
+    /** Aligns the given time down to the time grid (for suggested ranges). */
+    private static LocalDateTime alignToTimeGrid(LocalDateTime value, int timeGridMinutes) {
+        int step = AppSettings.normalizeTimeGridMinutes(timeGridMinutes);
+        if (step <= 1) {
+            return value.withSecond(0).withNano(0);
+        }
+        int minute = value.getMinute();
+        int rounded = (minute / step) * step;
+        return value.withMinute(rounded).withSecond(0).withNano(0);
     }
 
     /** Callback for Add dialog: returns suggested [from, to] when user changes customer or project. */
@@ -2692,15 +2816,21 @@ public class MainController {
         if (canMergeWithLast(activity)) {
             lastActivity.setTo(activity.getTo());
             if (activityTable != null) {
-                activityTable.refresh();
-                activityTable.getSelectionModel().select(lastActivity);
+                refreshAllActivityTables();
+                TableView<Activity> t = getCurrentActivityTable();
+                if (t != null) {
+                    t.getSelectionModel().select(lastActivity);
+                }
             }
             syncAllCalendarsFromActivities();
         } else {
             activities.add(activity);
             lastActivity = activity;
             if (activityTable != null) {
-                activityTable.getSelectionModel().select(activity);
+                TableView<Activity> tab = getCurrentActivityTable();
+                if (tab != null) {
+                    tab.getSelectionModel().select(activity);
+                }
             }
         }
         saveData();
@@ -2743,7 +2873,8 @@ public class MainController {
                     reopenWith.getProject(),
                     reopenWith.getTask(),
                     null,
-                    null
+                    null,
+                    0
                 )
                 : showActivityDialog(i18n("activity.edit.title"), selected);
             if (!input.isPresent()) {
@@ -2759,7 +2890,7 @@ public class MainController {
                 selected.setFrom(formatDateTime(adjusted.getFrom()));
                 selected.setTo(formatDateTime(adjusted.getTo()));
                 lastActivity = selected;
-                activityTable.refresh();
+                refreshAllActivityTables();
                 saveData();
                 applyFilters();
                 syncAllCalendarsFromActivities();
@@ -2830,21 +2961,54 @@ public class MainController {
         }
         saveData();
         applyFilters();
+        TableView<Activity> currentTable = getCurrentActivityTable();
+        if (currentTable != null) {
+            currentTable.getSelectionModel().select(secondPart);
+        }
+        refreshAllActivityTables();
+    }
+
+    private void refreshAllActivityTables() {
         if (activityTable != null) {
-            activityTable.getSelectionModel().select(secondPart);
             activityTable.refresh();
         }
+        if (viewTabPane != null) {
+            for (Tab tab : viewTabPane.getTabs()) {
+                Object ud = tab.getUserData();
+                if (ud instanceof ViewTabData) {
+                    ((ViewTabData) ud).table.refresh();
+                }
+            }
+        }
+    }
+
+    /** Table for the currently selected tab (main tab or a dynamic view tab); null for calendar tab. */
+    private TableView<Activity> getCurrentActivityTable() {
+        if (viewTabPane == null || activityTable == null) {
+            return activityTable;
+        }
+        int idx = viewTabPane.getSelectionModel().getSelectedIndex();
+        if (idx == 0) {
+            return activityTable;
+        }
+        if (idx == CALENDAR_TAB_INDEX) {
+            return null;
+        }
+        Tab tab = viewTabPane.getTabs().get(idx);
+        Object ud = tab.getUserData();
+        if (ud instanceof ViewTabData) {
+            return ((ViewTabData) ud).table;
+        }
+        return activityTable;
     }
 
     private Activity getSelectedActivity() {
-        if (activityTable == null) {
-            return null;
-        }
-        return activityTable.getSelectionModel().getSelectedItem();
+        TableView<Activity> table = getCurrentActivityTable();
+        return table != null ? table.getSelectionModel().getSelectedItem() : null;
     }
 
     private Optional<ActivityInput> showActivityDialog(String title, Activity existing) {
-        return showActivityDialog(title, existing, null, null, null, null, null, null, null);
+        return showActivityDialog(title, existing, null, null, null, null, null, null, null, 0);
     }
 
     private Optional<ActivityInput> showActivityDialog(
@@ -2856,7 +3020,8 @@ public class MainController {
         Project defaultProject,
         Task defaultTask,
         Function<Customer, DefaultProjectAndTask> defaultSelectionForCustomer,
-        java.util.function.BiFunction<Customer, Project, LocalDateTime[]> suggestedRangeForSelection
+        java.util.function.BiFunction<Customer, Project, LocalDateTime[]> suggestedRangeForSelection,
+        int endTimeRefreshIntervalMinutes
     ) {
         LocalDateTime fromDateTime = defaultFrom;
         LocalDateTime toDateTime = defaultTo;
@@ -2897,7 +3062,8 @@ public class MainController {
             this::getLastTaskForProject,
             suggestedRangeForSelection,
             this::openManagementDialog,
-            primaryStage
+            primaryStage,
+            endTimeRefreshIntervalMinutes
         );
     }
 
@@ -3169,26 +3335,20 @@ public class MainController {
 
     private void removeActivitiesForCustomer(String customerId) {
         activities.removeIf(activity -> customerId.equals(activity.getCustomerId()));
-        if (activityTable != null) {
-            activityTable.refresh();
-        }
+        refreshAllActivityTables();
     }
 
     private void removeActivitiesForProject(String customerId, String projectId) {
         activities.removeIf(activity -> customerId.equals(activity.getCustomerId())
             && projectId.equals(activity.getProjectId()));
-        if (activityTable != null) {
-            activityTable.refresh();
-        }
+        refreshAllActivityTables();
     }
 
     private void removeActivitiesForTask(String customerId, String projectId, String taskId) {
         activities.removeIf(activity -> customerId.equals(activity.getCustomerId())
             && projectId.equals(activity.getProjectId())
             && taskId.equals(activity.getTaskId()));
-        if (activityTable != null) {
-            activityTable.refresh();
-        }
+        refreshAllActivityTables();
     }
 
     private void loadData() {

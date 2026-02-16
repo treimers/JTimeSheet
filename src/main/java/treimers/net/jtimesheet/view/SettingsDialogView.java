@@ -54,7 +54,8 @@ public class SettingsDialogView {
         ButtonType cancelButton = new ButtonType(i18n("button.cancel"), ButtonData.CANCEL_CLOSE);
         dialog.getDialogPane().getButtonTypes().addAll(saveButton, cancelButton);
 
-        ComboBox<Integer> timeGridChoice = new ComboBox<>(FXCollections.observableArrayList(1, 6, 15));
+        List<Integer> gridOptions = TIME_GRID_AND_REMINDER_OPTIONS;
+        ComboBox<Integer> timeGridChoice = new ComboBox<>(FXCollections.observableArrayList(gridOptions));
         int currentGrid = settings.getTimeGridMinutes();
         if (!timeGridChoice.getItems().contains(currentGrid)) {
             timeGridChoice.getItems().add(currentGrid);
@@ -84,13 +85,24 @@ public class SettingsDialogView {
             }
         });
 
-        ComboBox<Integer> reminderIntervalChoice = new ComboBox<>(FXCollections.observableArrayList(15, 30, 60));
+        List<Integer> reminderIntervalOptions = reminderIntervalsForTimeGrid(currentGrid);
+        ComboBox<Integer> reminderIntervalChoice = new ComboBox<>(FXCollections.observableArrayList(reminderIntervalOptions));
         int currentInterval = settings.getReminderIntervalMinutes();
-        if (!reminderIntervalChoice.getItems().contains(currentInterval)) {
-            reminderIntervalChoice.getItems().add(currentInterval);
-            FXCollections.sort(reminderIntervalChoice.getItems());
-        }
-        reminderIntervalChoice.getSelectionModel().select(Integer.valueOf(currentInterval));
+        int intervalToSelect = (currentInterval >= currentGrid && reminderIntervalOptions.contains(currentInterval))
+            ? currentInterval
+            : reminderIntervalOptions.get(0);
+        reminderIntervalChoice.getSelectionModel().select(Integer.valueOf(intervalToSelect));
+        timeGridChoice.getSelectionModel().selectedItemProperty().addListener((obs, oldGrid, newGrid) -> {
+            if (newGrid == null) {
+                return;
+            }
+            List<Integer> allowed = reminderIntervalsForTimeGrid(newGrid);
+            reminderIntervalChoice.getItems().setAll(allowed);
+            Integer selected = reminderIntervalChoice.getValue();
+            if (selected == null || selected < newGrid || !reminderIntervalChoice.getItems().contains(selected)) {
+                reminderIntervalChoice.getSelectionModel().select(allowed.isEmpty() ? null : allowed.get(0));
+            }
+        });
         reminderIntervalChoice.setCellFactory(listView -> new ListCell<>() {
             @Override
             protected void updateItem(Integer item, boolean empty) {
@@ -276,6 +288,20 @@ public class SettingsDialogView {
             languageChoice.getValue(),
             dataDirectoryField.getText()
         ));
+    }
+
+    /** Allowed values for Time Grid and Reminder interval (divisors of 60). */
+    private static final List<Integer> TIME_GRID_AND_REMINDER_OPTIONS = List.of(1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60);
+
+    /** Reminder intervals that are not smaller than the time grid (same option set as grid). */
+    private static List<Integer> reminderIntervalsForTimeGrid(int timeGridMinutes) {
+        List<Integer> result = new ArrayList<>();
+        for (Integer v : TIME_GRID_AND_REMINDER_OPTIONS) {
+            if (v >= timeGridMinutes) {
+                result.add(v);
+            }
+        }
+        return result.isEmpty() ? List.of(timeGridMinutes) : result;
     }
 
     private List<LocalTime> createTimeOptions() {

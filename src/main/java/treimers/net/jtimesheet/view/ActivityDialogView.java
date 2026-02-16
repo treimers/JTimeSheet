@@ -13,8 +13,11 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.scene.control.Button;
+import javafx.util.Duration;
 
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -64,7 +67,8 @@ public class ActivityDialogView {
         BiFunction<Customer, Project, Task> defaultTaskForProject,
         BiFunction<Customer, Project, LocalDateTime[]> suggestedRangeForSelection,
         Consumer<Window> onOpenManage,
-        Window owner
+        Window owner,
+        int endTimeRefreshIntervalMinutes
     ) {
         Dialog<ActivityInput> dialog = new Dialog<>();
         if (owner != null) {
@@ -347,7 +351,62 @@ public class ActivityDialogView {
             );
         });
 
+        if (endTimeRefreshIntervalMinutes > 0) {
+            Timeline[] endTimeRefreshTimeline = { null };
+            dialog.setOnShown(event -> {
+                endTimeRefreshTimeline[0] = new Timeline(new KeyFrame(
+                    Duration.minutes(endTimeRefreshIntervalMinutes),
+                    e -> refreshEndTimeToNow(
+                        datePicker, fromHourChoice, fromMinuteChoice,
+                        toHourChoice, toMinuteChoice, durationTextField,
+                        updating, timeGridMinutes
+                    )
+                ));
+                endTimeRefreshTimeline[0].setCycleCount(Timeline.INDEFINITE);
+                endTimeRefreshTimeline[0].play();
+            });
+            dialog.setOnHidden(event -> {
+                if (endTimeRefreshTimeline[0] != null) {
+                    endTimeRefreshTimeline[0].stop();
+                }
+            });
+        }
+
         return dialog.showAndWait();
+    }
+
+    /**
+     * Updates the "to" time to current time (aligned to grid) and refreshes duration.
+     * Only applies when the selected date is today (reminder: end time = current time).
+     */
+    private void refreshEndTimeToNow(
+        DatePicker datePicker,
+        ComboBox<Integer> fromHourChoice,
+        ComboBox<Integer> fromMinuteChoice,
+        ComboBox<Integer> toHourChoice,
+        ComboBox<Integer> toMinuteChoice,
+        TextField durationTextField,
+        boolean[] updating,
+        int timeGridMinutes
+    ) {
+        if (updating[0]) {
+            return;
+        }
+        LocalDate selectedDate = datePicker.getValue();
+        if (selectedDate == null || !selectedDate.equals(LocalDate.now())) {
+            return;
+        }
+        LocalDateTime to = alignToGrid(LocalDateTime.now(), timeGridMinutes);
+        updating[0] = true;
+        try {
+            setTimeSelection(toHourChoice, toMinuteChoice, to.getHour(), to.getMinute(), timeGridMinutes);
+            LocalDateTime from = buildDateTimeOrNull(selectedDate, fromHourChoice.getValue(), fromMinuteChoice.getValue());
+            if (from != null && from.isBefore(to)) {
+                durationTextField.setText(formatDuration(from, to));
+            }
+        } finally {
+            updating[0] = false;
+        }
     }
 
     /** Refreshes customer/project/task choice boxes after Manage dialog closed (e.g. new entries added). Restores selection by id when possible. */
