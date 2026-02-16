@@ -633,14 +633,6 @@ public class ActivityDialogView {
         selectMinute(minuteChoice, minute);
     }
 
-    private HBox createDateTimeRow(DatePicker datePicker, ComboBox<Integer> hourChoice, ComboBox<Integer> minuteChoice) {
-        Label colon = new Label(":");
-        colon.setStyle("-fx-padding: 0 4 0 4;");
-        HBox box = new HBox(6, datePicker, hourChoice, colon, minuteChoice);
-        box.setFillHeight(true);
-        return box;
-    }
-
     private LocalDateTime alignToGrid(LocalDateTime value, int timeGridMinutes) {
         if (value == null) {
             return null;

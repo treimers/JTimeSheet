@@ -43,6 +43,10 @@ import com.calendarfx.model.Entry;
 import com.calendarfx.model.Interval;
 import com.calendarfx.view.CalendarView;
 import com.calendarfx.view.CalendarView.Page;
+import com.calendarfx.view.DayView;
+import com.calendarfx.view.MonthView;
+import com.calendarfx.view.WeekDayView;
+import com.calendarfx.view.WeekView;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
@@ -99,6 +103,8 @@ import javafx.scene.shape.SVGPath;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import treimers.net.jtimesheet.model.Activity;
+import treimers.net.jtimesheet.view.TooltipDayEntryView;
+import treimers.net.jtimesheet.view.TooltipMonthEntryView;
 import treimers.net.jtimesheet.model.AppSettings;
 import treimers.net.jtimesheet.model.Customer;
 import treimers.net.jtimesheet.model.Language;
@@ -781,6 +787,21 @@ public class MainController {
         updateTimeThread.start();
         activities.addListener((ListChangeListener<Activity>) c -> syncAllCalendarsFromActivities());
         syncAllCalendarsFromActivities();
+
+        // Entry view factories with tooltips (see https://github.com/dlsc-software-consulting-gmbh/CalendarFX/issues/133)
+        DayView dayView = calendarView.getDayPage().getDetailedDayView().getDayView();
+        dayView.setEntryViewFactory(entry -> new TooltipDayEntryView(entry, this::buildTooltipForEntry));
+
+        WeekView weekView = calendarView.getWeekPage().getDetailedWeekView().getWeekView();
+        weekView.setWeekDayViewFactory(param -> {
+            WeekDayView wdv = new WeekDayView();
+            wdv.setEntryViewFactory(entry -> new TooltipDayEntryView(entry, this::buildTooltipForEntry));
+            return wdv;
+        });
+
+        MonthView monthView = calendarView.getMonthPage().getMonthView();
+        monthView.setEntryViewFactory(entry -> new TooltipMonthEntryView(entry, this::buildTooltipForEntry));
+
         return calendarView;
     }
 
@@ -927,6 +948,76 @@ public class MainController {
             return customer;
         }
         return task != null ? task : (project != null ? project : i18n("section.activities"));
+    }
+
+    private long totalMinutesForDay(LocalDate date) {
+        long sum = 0;
+        for (Activity a : activities) {
+            LocalDateTime from = Activity.parseStoredDateTime(a.getFrom());
+            LocalDateTime to = Activity.parseStoredDateTime(a.getTo());
+            if (from != null && to != null && !to.isBefore(from) && from.toLocalDate().equals(date)) {
+                sum += Duration.between(from, to).toMinutes();
+            }
+        }
+        return sum;
+    }
+
+    private long totalMinutesForDayByCustomer(LocalDate date, String customerId) {
+        long sum = 0;
+        for (Activity a : activities) {
+            if (!java.util.Objects.equals(a.getCustomerId(), customerId)) continue;
+            LocalDateTime from = Activity.parseStoredDateTime(a.getFrom());
+            LocalDateTime to = Activity.parseStoredDateTime(a.getTo());
+            if (from != null && to != null && !to.isBefore(from) && from.toLocalDate().equals(date)) {
+                sum += Duration.between(from, to).toMinutes();
+            }
+        }
+        return sum;
+    }
+
+    private long totalMinutesForDayByCustomerProject(LocalDate date, String customerId, String projectId) {
+        long sum = 0;
+        for (Activity a : activities) {
+            if (!java.util.Objects.equals(a.getCustomerId(), customerId) || !java.util.Objects.equals(a.getProjectId(), projectId)) continue;
+            LocalDateTime from = Activity.parseStoredDateTime(a.getFrom());
+            LocalDateTime to = Activity.parseStoredDateTime(a.getTo());
+            if (from != null && to != null && !to.isBefore(from) && from.toLocalDate().equals(date)) {
+                sum += Duration.between(from, to).toMinutes();
+            }
+        }
+        return sum;
+    }
+
+    private String buildCalendarEntryTooltipText(Entry<Activity> entry) {
+        Activity first = entry.getUserObject();
+        Interval interval = entry.getInterval();
+        StringBuilder sb = new StringBuilder();
+        sb.append(buildActivityTitleForCalendar(first));
+        if (interval != null) {
+            sb.append("\n");
+            DateTimeFormatter timeFmt = DateTimeFormatter.ofPattern("HH:mm");
+            sb.append(interval.getStartDateTime().format(timeFmt))
+                .append(" – ")
+                .append(interval.getEndDateTime().format(timeFmt));
+            long min = Duration.between(interval.getStartDateTime(), interval.getEndDateTime()).toMinutes();
+            sb.append("  (").append(formatMinutes(min)).append(")");
+            LocalDate day = interval.getStartDateTime().toLocalDate();
+            sb.append("\n").append(i18n("calendar.tooltip.projectTotal", formatMinutes(totalMinutesForDayByCustomerProject(day, first.getCustomerId(), first.getProjectId()))));
+            sb.append("\n").append(i18n("calendar.tooltip.customerTotal", formatMinutes(totalMinutesForDayByCustomer(day, first.getCustomerId()))));
+            sb.append("\n").append(i18n("calendar.tooltip.dayTotal", formatMinutes(totalMinutesForDay(day))));
+        }
+        return sb.toString();
+    }
+
+    /** Builds tooltip text for any entry; used by calendar entry view factories. */
+    private String buildTooltipForEntry(Entry<?> entry) {
+        if (entry.getUserObject() instanceof Activity) {
+            @SuppressWarnings("unchecked")
+            Entry<Activity> actEntry = (Entry<Activity>) entry;
+            return buildCalendarEntryTooltipText(actEntry);
+        }
+        String loc = entry.getLocation();
+        return entry.getTitle() + (loc != null && !loc.isEmpty() ? "\n" + loc : "");
     }
 
     private VBox createFilterPanel() {
