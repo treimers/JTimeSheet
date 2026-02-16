@@ -132,20 +132,28 @@ public class ActivityDialogView {
                     Platform.runLater(applySuggestedRange);
                     return;
                 }
-                DefaultProjectAndTask pt = (defaultSelectionForCustomer != null) ? defaultSelectionForCustomer.apply(newValue) : null;
                 Project projectToSelect = null;
                 Task taskToSelect = null;
-                if (pt != null && pt.getProject() != null && newValue.getProjects().contains(pt.getProject())) {
-                    projectToSelect = pt.getProject();
-                    if (pt.getTask() != null && pt.getProject().getTasks().contains(pt.getTask())) {
-                        taskToSelect = pt.getTask();
-                    } else if (!pt.getProject().getTasks().isEmpty()) {
-                        taskToSelect = pt.getProject().getTasks().get(0);
+                if (defaultProject != null && newValue.getProjects().contains(defaultProject)) {
+                    projectToSelect = defaultProject;
+                    if (defaultTask != null && defaultProject.getTasks().contains(defaultTask)) {
+                        taskToSelect = defaultTask;
                     }
-                } else {
-                    Project firstProject = newValue.getProjects().get(0);
-                    projectToSelect = firstProject;
-                    taskToSelect = firstProject.getTasks().isEmpty() ? null : firstProject.getTasks().get(0);
+                }
+                if (projectToSelect == null) {
+                    DefaultProjectAndTask pt = (defaultSelectionForCustomer != null) ? defaultSelectionForCustomer.apply(newValue) : null;
+                    if (pt != null && pt.getProject() != null && newValue.getProjects().contains(pt.getProject())) {
+                        projectToSelect = pt.getProject();
+                        if (pt.getTask() != null && pt.getProject().getTasks().contains(pt.getTask())) {
+                            taskToSelect = pt.getTask();
+                        } else if (!pt.getProject().getTasks().isEmpty()) {
+                            taskToSelect = pt.getProject().getTasks().get(0);
+                        }
+                    } else {
+                        Project firstProject = newValue.getProjects().get(0);
+                        projectToSelect = firstProject;
+                        taskToSelect = firstProject.getTasks().isEmpty() ? null : firstProject.getTasks().get(0);
+                    }
                 }
                 if (projectToSelect != null) {
                     projectChoice.getSelectionModel().select(projectToSelect);
@@ -170,7 +178,10 @@ public class ActivityDialogView {
             } else {
                 taskChoice.setItems(newValue.getTasks());
                 Task taskToSelect = null;
-                if (defaultTaskForProject != null) {
+                if (defaultProject != null && defaultProject.equals(newValue) && defaultTask != null && newValue.getTasks().contains(defaultTask)) {
+                    taskToSelect = defaultTask;
+                }
+                if (taskToSelect == null && defaultTaskForProject != null) {
                     Customer customer = customerChoice.getSelectionModel().getSelectedItem();
                     if (customer != null) {
                         taskToSelect = defaultTaskForProject.apply(customer, newValue);

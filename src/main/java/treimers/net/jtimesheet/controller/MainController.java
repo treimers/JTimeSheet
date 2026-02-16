@@ -2020,7 +2020,7 @@ public class MainController {
         long delayMs = delay.toMillis();
         if (delayMs <= 0) {
             Platform.runLater(() -> {
-                openAddOrPromptActivityDialog(i18n("activity.add.title"), LocalDateTime.now());
+                openAddOrPromptActivityDialog(i18n("activity.add.title"), LocalDateTime.now(), true);
                 scheduleNextReminder();
             });
             return;
@@ -2028,7 +2028,7 @@ public class MainController {
         reminderDelay = new PauseTransition(millis(delayMs));
         reminderDelay.setOnFinished(event -> {
             Platform.runLater(() -> {
-                openAddOrPromptActivityDialog(i18n("activity.add.title"), LocalDateTime.now());
+                openAddOrPromptActivityDialog(i18n("activity.add.title"), LocalDateTime.now(), true);
                 scheduleNextReminder();
             });
         });
@@ -2095,13 +2095,35 @@ public class MainController {
         return a;
     }
 
-    /** Opens the add activity dialog with shared defaults (last or first customer/project/task). If overlap is found and user cancels the overlap dialog, the add dialog is shown again with the same values. */
-    private void openAddOrPromptActivityDialog(String title, LocalDateTime now) {
+    /** Result of suggestion: range to suggest, or blocked (user is inside an activity that ends in the future). */
+    private static class PromptSuggestion {
+        final LocalDateTime[] range;
+        final boolean blocked;
+        final LocalDateTime blockedUntil;
+
+        PromptSuggestion(LocalDateTime[] range, boolean blocked, LocalDateTime blockedUntil) {
+            this.range = range;
+            this.blocked = blocked;
+            this.blockedUntil = blockedUntil;
+        }
+    }
+
+    /** Opens the add activity dialog with shared defaults (last or first customer/project/task). If overlap is found and user cancels the overlap dialog, the add dialog is shown again with the same values. When fromReminder and user is inside an activity until future, dialog is not shown. When from Add Activity and blocked, user is informed by dialog. */
+    private void openAddOrPromptActivityDialog(String title, LocalDateTime now, boolean fromReminder) {
         Customer defaultCustomer = getDefaultCustomerForNewActivity();
         DefaultProjectAndTask defaultPt = defaultCustomer != null ? getLastProjectAndTaskForCustomer(defaultCustomer) : null;
         Project defaultProject = defaultPt != null ? defaultPt.getProject() : null;
         Task defaultTask = defaultPt != null ? defaultPt.getTask() : null;
-        LocalDateTime[] range = suggestedPromptRange(now, defaultCustomer, defaultProject);
+        PromptSuggestion suggestion = computePromptSuggestion(now, defaultCustomer, defaultProject);
+        if (suggestion.blocked) {
+            if (fromReminder) {
+                return;
+            }
+            String untilStr = suggestion.blockedUntil != null ? TIME_FORMAT.format(suggestion.blockedUntil.toLocalTime()) : "";
+            showInfo(i18n("activity.blocked.until", untilStr));
+            return;
+        }
+        LocalDateTime[] range = suggestion.range;
         ActivityInput reopenWith = null;
         while (true) {
             Optional<ActivityInput> input = showActivityDialog(
@@ -2130,45 +2152,124 @@ public class MainController {
     }
 
     /**
-     * Suggested time range for new activity: if the given customer (and optional project) had an activity ending today,
-     * use that end as start and now as end; otherwise now-1h to now. From/to are aligned to the time grid;
-     * end time is always current time (aligned to grid).
+     * Suggestion for Reminder / Add Activity:
+     * 1) If last end time is in the future (but today): a) if there is a free slot until now, use it; b) else block (no reminder / inform user).
+     * 2) Else if there is a free slot until now today, suggest it.
+     * 3) Else suggest last hour. End times on other days are ignored.
      */
-    private LocalDateTime[] suggestedPromptRange(LocalDateTime now, Customer customer, Project project) {
+    private PromptSuggestion computePromptSuggestion(LocalDateTime now, Customer customer, Project project) {
         int timeGridMinutes = AppSettings.normalizeTimeGridMinutes(settings.getTimeGridMinutes());
         LocalDateTime nowOnGrid = alignToTimeGrid(now, timeGridMinutes);
-        LocalDateTime from = nowOnGrid.minusHours(1);
-        LocalDateTime to = nowOnGrid;
+        LocalDate today = now.toLocalDate();
+
+        List<Activity> todays = getTodaysActivitiesForSuggestion(customer, project, today);
+        Activity containingNow = findActivityContainingNow(todays, now);
+        LocalDateTime lastEndBeforeNow = findLastEndBeforeNow(todays, now);
+
+        boolean lastEndInFuture = false;
         Activity last = null;
         if (customer != null) {
             last = project != null
                 ? findLastActivityForProject(customer.getId(), project.getId())
                 : findLastActivityForCustomer(customer.getId());
-        }
-        if (last == null && customer == null && lastActivity != null) {
-            LocalDateTime lastTo = Activity.parseStoredDateTime(lastActivity.getTo());
-            if (lastTo != null && lastTo.toLocalDate().equals(now.toLocalDate())) {
-                lastTo = alignToTimeGrid(lastTo, timeGridMinutes);
-                from = lastTo;
-                to = nowOnGrid.isBefore(lastTo) ? lastTo.plusHours(1) : nowOnGrid;
-            }
-            if (from.isAfter(to)) {
-                to = from.plusHours(1);
-            }
-            return new LocalDateTime[] { from, to };
+        } else if (lastActivity != null) {
+            last = lastActivity;
         }
         if (last != null) {
             LocalDateTime lastTo = Activity.parseStoredDateTime(last.getTo());
-            if (lastTo != null && lastTo.toLocalDate().equals(now.toLocalDate())) {
-                lastTo = alignToTimeGrid(lastTo, timeGridMinutes);
-                from = lastTo;
-                to = nowOnGrid.isBefore(lastTo) ? lastTo.plusHours(1) : nowOnGrid;
+            if (lastTo != null && lastTo.toLocalDate().equals(today) && lastTo.isAfter(nowOnGrid)) {
+                lastEndInFuture = true;
             }
         }
-        if (from.isAfter(to)) {
-            to = from.plusHours(1);
+
+        if (lastEndInFuture) {
+            if (containingNow != null) {
+                LocalDateTime end = Activity.parseStoredDateTime(containingNow.getTo());
+                return new PromptSuggestion(null, true, end);
+            }
+            LocalDateTime slotFrom = lastEndBeforeNow != null ? lastEndBeforeNow : today.atStartOfDay();
+            slotFrom = alignToTimeGrid(slotFrom, timeGridMinutes);
+            if (slotFrom.isBefore(nowOnGrid)) {
+                LocalDateTime[] range = capEndTimeToNow(slotFrom, nowOnGrid, nowOnGrid);
+                return new PromptSuggestion(range, false, null);
+            }
         }
-        return new LocalDateTime[] { from, to };
+
+        if (lastEndBeforeNow != null && !lastEndBeforeNow.isBefore(nowOnGrid)) {
+            lastEndBeforeNow = null;
+        }
+        LocalDateTime from = lastEndBeforeNow != null ? alignToTimeGrid(lastEndBeforeNow, timeGridMinutes) : nowOnGrid.minusHours(1);
+        LocalDateTime to = nowOnGrid;
+        if (!from.isBefore(to)) {
+            from = nowOnGrid.minusHours(1);
+        }
+        return new PromptSuggestion(capEndTimeToNow(from, to, nowOnGrid), false, null);
+    }
+
+    private List<Activity> getTodaysActivitiesForSuggestion(Customer customer, Project project, LocalDate today) {
+        List<Activity> result = new ArrayList<>();
+        String customerId = customer != null ? customer.getId() : null;
+        String projectId = project != null ? project.getId() : null;
+        for (Activity a : activities) {
+            LocalDateTime from = Activity.parseStoredDateTime(a.getFrom());
+            if (from == null || !from.toLocalDate().equals(today)) {
+                continue;
+            }
+            if (customerId != null && !customerId.equals(a.getCustomerId())) {
+                continue;
+            }
+            if (projectId != null && !projectId.equals(a.getProjectId())) {
+                continue;
+            }
+            result.add(a);
+        }
+        return result;
+    }
+
+    /** Activity that contains "now" (from <= now < to) and ends in the future (to > now). */
+    private Activity findActivityContainingNow(List<Activity> todays, LocalDateTime now) {
+        for (Activity a : todays) {
+            LocalDateTime from = Activity.parseStoredDateTime(a.getFrom());
+            LocalDateTime to = Activity.parseStoredDateTime(a.getTo());
+            if (from == null || to == null) {
+                continue;
+            }
+            if (!from.isAfter(now) && to.isAfter(now)) {
+                return a;
+            }
+        }
+        return null;
+    }
+
+    /** Latest activity end time that is <= now, or null if none (then use start of day). */
+    private LocalDateTime findLastEndBeforeNow(List<Activity> todays, LocalDateTime now) {
+        LocalDateTime last = null;
+        for (Activity a : todays) {
+            LocalDateTime to = Activity.parseStoredDateTime(a.getTo());
+            if (to == null || to.isAfter(now)) {
+                continue;
+            }
+            if (last == null || to.isAfter(last)) {
+                last = to;
+            }
+        }
+        return last;
+    }
+
+    /** Ensures end time is never in the future (reminder / add activity). */
+    private static LocalDateTime[] capEndTimeToNow(LocalDateTime from, LocalDateTime to, LocalDateTime nowOnGrid) {
+        if (!to.isAfter(nowOnGrid)) {
+            return new LocalDateTime[] { from, to };
+        }
+        LocalDateTime cappedTo = nowOnGrid;
+        LocalDateTime cappedFrom = from;
+        if (!cappedFrom.isBefore(cappedTo)) {
+            cappedFrom = cappedTo.minusHours(1);
+            if (cappedFrom.toLocalDate().isBefore(cappedTo.toLocalDate())) {
+                cappedFrom = cappedTo.toLocalDate().atStartOfDay();
+            }
+        }
+        return new LocalDateTime[] { cappedFrom, cappedTo };
     }
 
     /** Aligns the given time down to the time grid (for suggested ranges). */
@@ -2182,9 +2283,16 @@ public class MainController {
         return value.withMinute(rounded).withSecond(0).withNano(0);
     }
 
-    /** Callback for Add dialog: returns suggested [from, to] when user changes customer or project. */
+    /** Callback for Add dialog: returns suggested [from, to] when user changes customer or project. If blocked, returns last hour so the dialog has a valid range. */
     private LocalDateTime[] suggestedPromptRangeForSelection(Customer customer, Project project) {
-        return suggestedPromptRange(LocalDateTime.now(), customer, project);
+        PromptSuggestion s = computePromptSuggestion(LocalDateTime.now(), customer, project);
+        if (s.range != null) {
+            return s.range;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        int timeGridMinutes = AppSettings.normalizeTimeGridMinutes(settings.getTimeGridMinutes());
+        LocalDateTime nowOnGrid = alignToTimeGrid(now, timeGridMinutes);
+        return new LocalDateTime[] { nowOnGrid.minusHours(1), nowOnGrid };
     }
 
     private void importCsv() {
@@ -2642,7 +2750,7 @@ public class MainController {
     }
 
     private void addActivity() {
-        openAddOrPromptActivityDialog(i18n("activity.add.title"), LocalDateTime.now());
+        openAddOrPromptActivityDialog(i18n("activity.add.title"), LocalDateTime.now(), false);
     }
 
     /** Returns activities that overlap with [from, to), excluding {@code exclude}. Touching (end == start) is not overlap. */
