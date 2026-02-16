@@ -194,6 +194,10 @@ public class MainController {
     private Label fromFilterLabel;
     private Label toFilterLabel;
     private Label presetFilterLabel;
+    private Label periodNavLabel;
+    private Button periodPrevButton;
+    private Button periodNextButton;
+    private HBox periodNavBox;
     private Button clearCustomerButton;
     private Button clearProjectButton;
     private Button clearTasksButton;
@@ -1130,6 +1134,7 @@ public class MainController {
             applyingPreset = true;
             try {
                 applyPreset(newValue);
+                updateMainPeriodNav();
                 applyFilters();
                 saveFilterPreferences();
             } finally {
@@ -1137,8 +1142,19 @@ public class MainController {
             }
         });
 
+        periodNavLabel = new Label();
+        periodPrevButton = new Button(i18n("filter.period.prev"));
+        periodPrevButton.setOnAction(e -> shiftMainPeriod(-1));
+        periodNextButton = new Button(i18n("filter.period.next"));
+        periodNextButton.setOnAction(e -> shiftMainPeriod(1));
+        periodNavBox = new HBox(6, periodPrevButton, periodNavLabel, periodNextButton);
+        periodNavBox.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+
         updateProjectFilter(null);
         updateTaskFilter(null, null);
+
+        fromFilter.valueProperty().addListener((obs, o, n) -> updateMainPeriodNav());
+        toFilter.valueProperty().addListener((obs, o, n) -> updateMainPeriodNav());
 
         HBox row1 = new HBox(
             10,
@@ -1158,6 +1174,7 @@ public class MainController {
             toFilter,
             presetFilterLabel = new Label(i18n("filter.preset.label")),
             presetFilter,
+            periodNavBox,
             clearDatesButton
         );
 
@@ -1249,48 +1266,119 @@ public class MainController {
             applyFilters();
             saveViewTabsPreferences();
         });
+
+        Label viewPeriodLabel = new Label();
+        Button viewPeriodPrev = new Button(i18n("filter.period.prev"));
+        Button viewPeriodNext = new Button(i18n("filter.period.next"));
+        HBox viewPeriodNavBox = new HBox(6, viewPeriodPrev, viewPeriodLabel, viewPeriodNext);
+        viewPeriodNavBox.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+
+        viewPeriodPrev.setOnAction(e -> {
+            PresetRange p = viewPreset.getValue();
+            LocalDate from = viewFrom.getValue();
+            LocalDate to = viewTo.getValue();
+            if (p == PresetRange.DAY && from != null && to != null) {
+                applyingViewPreset[0] = true;
+                viewFrom.setValue(from.plusDays(-1));
+                viewTo.setValue(to.plusDays(-1));
+                state.setFromDate(viewFrom.getValue());
+                state.setToDate(viewTo.getValue());
+                applyingViewPreset[0] = false;
+                updateViewPeriodNavLabel(viewPeriodLabel, viewPeriodNavBox, p, viewFrom.getValue(), viewTo.getValue());
+                applyFilters();
+                saveViewTabsPreferences();
+            } else if (p == PresetRange.WEEK && from != null && to != null) {
+                applyingViewPreset[0] = true;
+                viewFrom.setValue(from.plusWeeks(-1));
+                viewTo.setValue(to.plusWeeks(-1));
+                state.setFromDate(viewFrom.getValue());
+                state.setToDate(viewTo.getValue());
+                applyingViewPreset[0] = false;
+                updateViewPeriodNavLabel(viewPeriodLabel, viewPeriodNavBox, p, viewFrom.getValue(), viewTo.getValue());
+                applyFilters();
+                saveViewTabsPreferences();
+            } else if (p == PresetRange.MONTH && from != null && to != null) {
+                applyingViewPreset[0] = true;
+                viewFrom.setValue(from.plusMonths(-1));
+                viewTo.setValue(to.plusMonths(-1));
+                state.setFromDate(viewFrom.getValue());
+                state.setToDate(viewTo.getValue());
+                applyingViewPreset[0] = false;
+                updateViewPeriodNavLabel(viewPeriodLabel, viewPeriodNavBox, p, viewFrom.getValue(), viewTo.getValue());
+                applyFilters();
+                saveViewTabsPreferences();
+            }
+        });
+        viewPeriodNext.setOnAction(e -> {
+            PresetRange p = viewPreset.getValue();
+            LocalDate from = viewFrom.getValue();
+            LocalDate to = viewTo.getValue();
+            if (p == PresetRange.DAY && from != null && to != null) {
+                applyingViewPreset[0] = true;
+                viewFrom.setValue(from.plusDays(1));
+                viewTo.setValue(to.plusDays(1));
+                state.setFromDate(viewFrom.getValue());
+                state.setToDate(viewTo.getValue());
+                applyingViewPreset[0] = false;
+                updateViewPeriodNavLabel(viewPeriodLabel, viewPeriodNavBox, p, viewFrom.getValue(), viewTo.getValue());
+                applyFilters();
+                saveViewTabsPreferences();
+            } else if (p == PresetRange.WEEK && from != null && to != null) {
+                applyingViewPreset[0] = true;
+                viewFrom.setValue(from.plusWeeks(1));
+                viewTo.setValue(to.plusWeeks(1));
+                state.setFromDate(viewFrom.getValue());
+                state.setToDate(viewTo.getValue());
+                applyingViewPreset[0] = false;
+                updateViewPeriodNavLabel(viewPeriodLabel, viewPeriodNavBox, p, viewFrom.getValue(), viewTo.getValue());
+                applyFilters();
+                saveViewTabsPreferences();
+            } else if (p == PresetRange.MONTH && from != null && to != null) {
+                applyingViewPreset[0] = true;
+                viewFrom.setValue(from.plusMonths(1));
+                viewTo.setValue(to.plusMonths(1));
+                state.setFromDate(viewFrom.getValue());
+                state.setToDate(viewTo.getValue());
+                applyingViewPreset[0] = false;
+                updateViewPeriodNavLabel(viewPeriodLabel, viewPeriodNavBox, p, viewFrom.getValue(), viewTo.getValue());
+                applyFilters();
+                saveViewTabsPreferences();
+            }
+        });
+
         viewPreset.valueProperty().addListener((obs, o, n) -> {
             if (n == null) return;
             state.setPresetKey(n.name());
             applyingViewPreset[0] = true;
             try {
                 LocalDate today = LocalDate.now();
+                DayOfWeek firstDay = settings.getFirstDayOfWeek();
                 switch (n) {
-                case TODAY -> { viewFrom.setValue(today); viewTo.setValue(today); state.setFromDate(today); state.setToDate(today); }
-                case YESTERDAY -> {
-                    LocalDate y = today.minusDays(1);
-                    viewFrom.setValue(y); viewTo.setValue(y); state.setFromDate(y); state.setToDate(y);
-                }
-                case THIS_WEEK -> {
-                    DayOfWeek firstDay = settings.getFirstDayOfWeek();
-                    LocalDate start = today.with(TemporalAdjusters.previousOrSame(firstDay));
-                    LocalDate end = start.plusDays(6);
+                case DAY -> { viewFrom.setValue(today); viewTo.setValue(today); state.setFromDate(today); state.setToDate(today); }
+                case WEEK -> {
+                    LocalDate start = startOfWeek(today, firstDay);
+                    LocalDate end = endOfWeek(today, firstDay);
                     viewFrom.setValue(start); viewTo.setValue(end); state.setFromDate(start); state.setToDate(end);
                 }
-                case LAST_WEEK -> {
-                    DayOfWeek firstDay = settings.getFirstDayOfWeek();
-                    LocalDate start = today.with(TemporalAdjusters.previousOrSame(firstDay)).minusWeeks(1);
-                    LocalDate end = start.plusDays(6);
-                    viewFrom.setValue(start); viewTo.setValue(end); state.setFromDate(start); state.setToDate(end);
-                }
-                case THIS_MONTH -> {
+                case MONTH -> {
                     LocalDate start = today.with(TemporalAdjusters.firstDayOfMonth());
                     LocalDate end = today.with(TemporalAdjusters.lastDayOfMonth());
                     viewFrom.setValue(start); viewTo.setValue(end); state.setFromDate(start); state.setToDate(end);
                 }
-                case LAST_MONTH -> {
-                    LocalDate start = today.minusMonths(1).with(TemporalAdjusters.firstDayOfMonth());
-                    LocalDate end = today.minusMonths(1).with(TemporalAdjusters.lastDayOfMonth());
-                    viewFrom.setValue(start); viewTo.setValue(end); state.setFromDate(start); state.setToDate(end);
-                }
                 default -> { }
                 }
+                updateViewPeriodNavLabel(viewPeriodLabel, viewPeriodNavBox, viewPreset.getValue(), viewFrom.getValue(), viewTo.getValue());
                 applyFilters();
                 saveViewTabsPreferences();
             } finally {
                 applyingViewPreset[0] = false;
             }
         });
+
+        viewFrom.valueProperty().addListener((obs, o, n) -> updateViewPeriodNavLabel(viewPeriodLabel, viewPeriodNavBox, viewPreset.getValue(), viewFrom.getValue(), viewTo.getValue()));
+        viewTo.valueProperty().addListener((obs, o, n) -> updateViewPeriodNavLabel(viewPeriodLabel, viewPeriodNavBox, viewPreset.getValue(), viewFrom.getValue(), viewTo.getValue()));
+
+        updateViewPeriodNavLabel(viewPeriodLabel, viewPeriodNavBox, viewPreset.getValue(), viewFrom.getValue(), viewTo.getValue());
 
         Node tasksRow;
         if (state.getFixedTask() != null) {
@@ -1302,6 +1390,7 @@ public class MainController {
             new Label(i18n("filter.from.label")), viewFrom,
             new Label(i18n("filter.to.label")), viewTo,
             new Label(i18n("filter.preset.label")), viewPreset,
+            viewPeriodNavBox,
             viewClearDates
         );
         VBox panel = new VBox(8, fixedFilterLabel, tasksRow, datesRow);
@@ -1626,18 +1715,17 @@ public class MainController {
         }
 
         PresetRange preset = PresetRange.fromPreference(presetValue);
+        if (PresetRange.isRelativePreset(presetValue)) {
+            applyRelativePresetFromRaw(presetValue, (from, to) -> {
+                fromFilter.setValue(from);
+                toFilter.setValue(to);
+            });
+        } else {
+            fromFilter.setValue(fromValue != null && !fromValue.isBlank() ? LocalDate.parse(fromValue) : null);
+            toFilter.setValue(toValue != null && !toValue.isBlank() ? LocalDate.parse(toValue) : null);
+        }
         presetFilter.getSelectionModel().select(preset);
-        if (fromValue != null && !fromValue.isBlank()) {
-            fromFilter.setValue(LocalDate.parse(fromValue));
-        } else {
-            fromFilter.setValue(null);
-        }
-        if (toValue != null && !toValue.isBlank()) {
-            toFilter.setValue(LocalDate.parse(toValue));
-        } else {
-            toFilter.setValue(null);
-        }
-
+        updateMainPeriodNav();
         applyFilters();
         restoringPreferences = false;
     }
@@ -1661,6 +1749,27 @@ public class MainController {
             preferences.put(prefix + "to", state.getToDate() != null ? state.getToDate().toString() : "");
             preferences.put(prefix + "preset", state.getPresetKey() != null ? state.getPresetKey() : PresetRange.CUSTOM.name());
         }
+        removeOrphanedViewPreferences(count);
+    }
+
+    /** Removes view.N.* keys where N >= count (leftover from when the user had more tabs and closed some). */
+    private void removeOrphanedViewPreferences(int count) {
+        try {
+            for (String key : preferences.keys()) {
+                if (key.startsWith("view.") && key.length() > "view.".length()) {
+                    int dot = key.indexOf('.', "view.".length());
+                    if (dot > 0) {
+                        String numPart = key.substring("view.".length(), dot);
+                        if (numPart.matches("\\d+")) {
+                            int index = Integer.parseInt(numPart);
+                            if (index >= count) {
+                                preferences.remove(key);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) { }
     }
 
     private void restoreViewTabsPreferences() {
@@ -1728,17 +1837,25 @@ public class MainController {
                     }
                 }
             }
-            if (!fromStr.isBlank()) {
-                try {
-                    state.setFromDate(LocalDate.parse(fromStr));
-                } catch (Exception ignored) { }
+            if (PresetRange.isRelativePreset(presetStr)) {
+                applyRelativePresetFromRaw(presetStr, (from, to) -> {
+                    state.setFromDate(from);
+                    state.setToDate(to);
+                });
+                state.setPresetKey(PresetRange.fromPreference(presetStr).name());
+            } else {
+                if (!fromStr.isBlank()) {
+                    try {
+                        state.setFromDate(LocalDate.parse(fromStr));
+                    } catch (Exception ignored) { }
+                }
+                if (!toStr.isBlank()) {
+                    try {
+                        state.setToDate(LocalDate.parse(toStr));
+                    } catch (Exception ignored) { }
+                }
+                state.setPresetKey(presetStr);
             }
-            if (!toStr.isBlank()) {
-                try {
-                    state.setToDate(LocalDate.parse(toStr));
-                } catch (Exception ignored) { }
-            }
-            state.setPresetKey(presetStr);
 
             viewTabStates.add(state);
             TableView<Activity> viewTable = createViewActivityTable();
@@ -1780,48 +1897,101 @@ public class MainController {
             return;
         }
         LocalDate today = LocalDate.now();
+        DayOfWeek firstDay = settings.getFirstDayOfWeek();
         switch (preset) {
-            case TODAY:
+            case DAY:
                 fromFilter.setValue(today);
                 toFilter.setValue(today);
                 break;
-            case YESTERDAY:
-                LocalDate yesterday = today.minusDays(1);
-                fromFilter.setValue(yesterday);
-                toFilter.setValue(yesterday);
-                break;
-            case THIS_WEEK: {
-                DayOfWeek firstDay = settings.getFirstDayOfWeek();
-                LocalDate start = today.with(TemporalAdjusters.previousOrSame(firstDay));
-                LocalDate end = start.plusDays(6);
+            case WEEK: {
+                LocalDate start = startOfWeek(today, firstDay);
+                LocalDate end = endOfWeek(today, firstDay);
                 fromFilter.setValue(start);
                 toFilter.setValue(end);
                 break;
             }
-            case LAST_WEEK: {
-                DayOfWeek firstDay = settings.getFirstDayOfWeek();
-                LocalDate start = today.with(TemporalAdjusters.previousOrSame(firstDay)).minusWeeks(1);
-                LocalDate end = start.plusDays(6);
-                fromFilter.setValue(start);
-                toFilter.setValue(end);
-                break;
-            }
-            case THIS_MONTH: {
+            case MONTH: {
                 LocalDate start = today.with(TemporalAdjusters.firstDayOfMonth());
                 LocalDate end = today.with(TemporalAdjusters.lastDayOfMonth());
                 fromFilter.setValue(start);
                 toFilter.setValue(end);
                 break;
             }
-            case LAST_MONTH: {
-                LocalDate start = today.minusMonths(1).with(TemporalAdjusters.firstDayOfMonth());
-                LocalDate end = today.minusMonths(1).with(TemporalAdjusters.lastDayOfMonth());
-                fromFilter.setValue(start);
-                toFilter.setValue(end);
-                break;
-            }
             default:
                 break;
+        }
+    }
+
+    private void updateMainPeriodNav() {
+        if (periodNavLabel == null || periodPrevButton == null || periodNextButton == null || periodNavBox == null) {
+            return;
+        }
+        PresetRange preset = presetFilter != null ? presetFilter.getValue() : null;
+        LocalDate from = fromFilter != null ? fromFilter.getValue() : null;
+        LocalDate to = toFilter != null ? toFilter.getValue() : null;
+        if (preset == PresetRange.DAY && from != null && to != null) {
+            periodNavLabel.setText(formatDay(from));
+            periodNavBox.setVisible(true);
+            periodPrevButton.setDisable(false);
+            periodNextButton.setDisable(false);
+        } else if (preset == PresetRange.WEEK && from != null && to != null) {
+            periodNavLabel.setText(formatWeekRange(from, to));
+            periodNavBox.setVisible(true);
+            periodPrevButton.setDisable(false);
+            periodNextButton.setDisable(false);
+        } else if (preset == PresetRange.MONTH && from != null && to != null) {
+            periodNavLabel.setText(formatMonthRange(from, to));
+            periodNavBox.setVisible(true);
+            periodPrevButton.setDisable(false);
+            periodNextButton.setDisable(false);
+        } else {
+            periodNavLabel.setText("");
+            periodNavBox.setVisible(false);
+        }
+    }
+
+    private void shiftMainPeriod(int delta) {
+        PresetRange preset = presetFilter != null ? presetFilter.getValue() : null;
+        LocalDate from = fromFilter.getValue();
+        LocalDate to = toFilter.getValue();
+        if (preset == null || from == null || to == null) return;
+        if (preset == PresetRange.DAY) {
+            fromFilter.setValue(from.plusDays(delta));
+            toFilter.setValue(to.plusDays(delta));
+        } else if (preset == PresetRange.WEEK) {
+            fromFilter.setValue(from.plusWeeks(delta));
+            toFilter.setValue(to.plusWeeks(delta));
+        } else if (preset == PresetRange.MONTH) {
+            fromFilter.setValue(from.plusMonths(delta));
+            toFilter.setValue(to.plusMonths(delta));
+        }
+        applyFilters();
+        saveFilterPreferences();
+    }
+
+    /** Applies dates for a relative preset (THIS_WEEK, LAST_WEEK, THIS_MONTH, LAST_MONTH) when restoring from preferences. */
+    private void applyRelativePresetFromRaw(String rawPreset, java.util.function.BiConsumer<LocalDate, LocalDate> setFromTo) {
+        if (rawPreset == null || setFromTo == null || !PresetRange.isRelativePreset(rawPreset)) {
+            return;
+        }
+        LocalDate today = LocalDate.now();
+        DayOfWeek firstDay = settings.getFirstDayOfWeek();
+        String v = rawPreset.trim();
+        if ("TODAY".equals(v) || "Today".equals(v)) {
+            setFromTo.accept(today, today);
+        } else if ("YESTERDAY".equals(v) || "Yesterday".equals(v)) {
+            LocalDate y = today.minusDays(1);
+            setFromTo.accept(y, y);
+        } else if ("THIS_WEEK".equals(v) || "This Week".equals(v)) {
+            setFromTo.accept(startOfWeek(today, firstDay), endOfWeek(today, firstDay));
+        } else if ("LAST_WEEK".equals(v) || "Last Week".equals(v)) {
+            LocalDate start = startOfWeek(today, firstDay).minusWeeks(1);
+            setFromTo.accept(start, start.plusDays(6));
+        } else if ("THIS_MONTH".equals(v) || "This Month".equals(v)) {
+            setFromTo.accept(today.with(TemporalAdjusters.firstDayOfMonth()), today.with(TemporalAdjusters.lastDayOfMonth()));
+        } else if ("LAST_MONTH".equals(v) || "Last Month".equals(v)) {
+            LocalDate lastMonth = today.minusMonths(1);
+            setFromTo.accept(lastMonth.with(TemporalAdjusters.firstDayOfMonth()), lastMonth.with(TemporalAdjusters.lastDayOfMonth()));
         }
     }
 
@@ -3952,20 +4122,55 @@ public class MainController {
         switch (preset) {
             case CUSTOM:
                 return i18n("preset.custom");
-            case TODAY:
-                return i18n("preset.today");
-            case YESTERDAY:
-                return i18n("preset.yesterday");
-            case THIS_WEEK:
-                return i18n("preset.thisWeek");
-            case LAST_WEEK:
-                return i18n("preset.lastWeek");
-            case THIS_MONTH:
-                return i18n("preset.thisMonth");
-            case LAST_MONTH:
-                return i18n("preset.lastMonth");
+            case DAY:
+                return i18n("preset.day");
+            case WEEK:
+                return i18n("preset.week");
+            case MONTH:
+                return i18n("preset.month");
             default:
                 return "";
+        }
+    }
+
+    private static LocalDate startOfWeek(LocalDate date, DayOfWeek firstDayOfWeek) {
+        return date.with(TemporalAdjusters.previousOrSame(firstDayOfWeek));
+    }
+
+    private static LocalDate endOfWeek(LocalDate date, DayOfWeek firstDayOfWeek) {
+        return startOfWeek(date, firstDayOfWeek).plusDays(6);
+    }
+
+    private String formatWeekRange(LocalDate from, LocalDate to) {
+        if (from == null || to == null) return "";
+        DateTimeFormatter f = DateTimeFormatter.ofPattern("dd.MM.yyyy", currentLocale);
+        return from.format(f) + " – " + to.format(f);
+    }
+
+    private String formatMonthRange(LocalDate from, LocalDate to) {
+        if (from == null || to == null) return "";
+        return from.format(DateTimeFormatter.ofPattern("MMMM yyyy", currentLocale));
+    }
+
+    private String formatDay(LocalDate date) {
+        if (date == null) return "";
+        return date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy", currentLocale));
+    }
+
+    private void updateViewPeriodNavLabel(Label label, HBox navBox, PresetRange preset, LocalDate from, LocalDate to) {
+        if (label == null) return;
+        if (preset == PresetRange.DAY && from != null && to != null) {
+            label.setText(formatDay(from));
+            if (navBox != null) navBox.setVisible(true);
+        } else if (preset == PresetRange.WEEK && from != null && to != null) {
+            label.setText(formatWeekRange(from, to));
+            if (navBox != null) navBox.setVisible(true);
+        } else if (preset == PresetRange.MONTH && from != null && to != null) {
+            label.setText(formatMonthRange(from, to));
+            if (navBox != null) navBox.setVisible(true);
+        } else {
+            label.setText("");
+            if (navBox != null) navBox.setVisible(false);
         }
     }
 
@@ -4004,39 +4209,46 @@ public class MainController {
 
     private enum PresetRange {
         CUSTOM,
-        TODAY,
-        YESTERDAY,
-        THIS_WEEK,
-        LAST_WEEK,
-        THIS_MONTH,
-        LAST_MONTH;
+        DAY,
+        WEEK,
+        MONTH;
 
         static PresetRange fromPreference(String value) {
             if (value == null || value.isBlank()) {
                 return CUSTOM;
             }
+            String v = value.trim();
             try {
-                return PresetRange.valueOf(value);
-            } catch (IllegalArgumentException exception) {
-                switch (value.trim()) {
-                    case "Custom":
-                        return CUSTOM;
-                    case "Today":
-                        return TODAY;
-                    case "Yesterday":
-                        return YESTERDAY;
-                    case "This Week":
-                        return THIS_WEEK;
-                    case "Last Week":
-                        return LAST_WEEK;
-                    case "This Month":
-                        return THIS_MONTH;
-                    case "Last Month":
-                        return LAST_MONTH;
-                    default:
-                        return CUSTOM;
-                }
+                PresetRange r = PresetRange.valueOf(v);
+                return r;
+            } catch (IllegalArgumentException ignored) { }
+            switch (v) {
+                case "Custom":
+                    return CUSTOM;
+                case "Today":
+                case "Yesterday":
+                case "TODAY":
+                case "YESTERDAY":
+                    return DAY;
+                case "This Week":
+                case "Last Week":
+                    return WEEK;
+                case "This Month":
+                case "Last Month":
+                    return MONTH;
+                default:
+                    return CUSTOM;
             }
+        }
+
+        static boolean isRelativePreset(String rawValue) {
+            if (rawValue == null) return false;
+            String v = rawValue.trim();
+            return "TODAY".equals(v) || "YESTERDAY".equals(v) || "Today".equals(v) || "Yesterday".equals(v)
+                || "THIS_WEEK".equals(v) || "LAST_WEEK".equals(v)
+                || "THIS_MONTH".equals(v) || "LAST_MONTH".equals(v)
+                || "This Week".equals(v) || "Last Week".equals(v)
+                || "This Month".equals(v) || "Last Month".equals(v);
         }
     }
 
