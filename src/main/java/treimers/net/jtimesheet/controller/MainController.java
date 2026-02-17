@@ -149,6 +149,8 @@ public class MainController {
     private FilteredList<Activity> filteredActivities;
     private Activity lastActivity;
     private PauseTransition reminderDelay;
+    /** When true, next schedule shows reminder immediately if we're in the reminder window (e.g. on startup). */
+    private boolean reminderShowImmediatelyIfInWindow;
     private final Preferences preferences = Preferences.userRoot().node("net/treimers/jtimesheet");
     private final SettingsService settingsService;
     private final StorageService storageService;
@@ -2268,6 +2270,7 @@ public class MainController {
         if (reminderDelay != null) {
             reminderDelay.stop();
         }
+        reminderShowImmediatelyIfInWindow = true;
         scheduleNextReminder();
     }
 
@@ -2290,6 +2293,14 @@ public class MainController {
             });
             return;
         }
+        if (reminderShowImmediatelyIfInWindow && isNowWithinReminderWindow()) {
+            reminderShowImmediatelyIfInWindow = false;
+            Platform.runLater(() -> {
+                openAddOrPromptActivityDialog(i18n("activity.add.title"), LocalDateTime.now(), true);
+                scheduleNextReminder();
+            });
+            return;
+        }
         reminderDelay = new PauseTransition(millis(delayMs));
         reminderDelay.setOnFinished(event -> {
             Platform.runLater(() -> {
@@ -2300,27 +2311,39 @@ public class MainController {
         reminderDelay.play();
     }
 
+    /** True if current time is within reminder window (today's start–end and a reminder weekday). */
+    private boolean isNowWithinReminderWindow() {
+        LocalDateTime now = LocalDateTime.now();
+        if (!settings.getReminderWeekdays().contains(now.getDayOfWeek())) {
+            return false;
+        }
+        LocalTime t = now.toLocalTime();
+        return !t.isBefore(settings.getReminderStartTime()) && !t.isAfter(settings.getReminderEndTime());
+    }
+
     private LocalDateTime nextReminderTime(LocalDateTime now) {
+        Set<DayOfWeek> weekdays = settings.getReminderWeekdays();
+        if (weekdays.isEmpty()) {
+            return now.plusYears(1);
+        }
         int interval = AppSettings.normalizeReminderIntervalMinutes(settings.getReminderIntervalMinutes());
-        int timeGridMinutes = AppSettings.normalizeTimeGridMinutes(settings.getTimeGridMinutes());
         LocalTime start = settings.getReminderStartTime();
         LocalTime end = settings.getReminderEndTime();
-        Set<DayOfWeek> weekdays = settings.getReminderWeekdays();
-        LocalDateTime candidate = alignToReminderInterval(now, interval, timeGridMinutes);
+        LocalDateTime candidate = alignToReminderInterval(now, interval);
 
         while (true) {
             LocalDate date = candidate.toLocalDate();
             if (!weekdays.contains(date.getDayOfWeek())) {
-                candidate = alignToReminderInterval(LocalDateTime.of(date.plusDays(1), start), interval, timeGridMinutes);
+                candidate = alignToReminderInterval(LocalDateTime.of(date.plusDays(1), start), interval);
                 continue;
             }
             LocalDateTime windowStart = LocalDateTime.of(date, start);
             LocalDateTime windowEnd = LocalDateTime.of(date, end);
             if (candidate.isBefore(windowStart)) {
-                candidate = alignToReminderInterval(windowStart, interval, timeGridMinutes);
+                candidate = alignToReminderInterval(windowStart, interval);
             }
             if (candidate.isAfter(windowEnd)) {
-                candidate = alignToReminderInterval(LocalDateTime.of(date.plusDays(1), start), interval, timeGridMinutes);
+                candidate = alignToReminderInterval(LocalDateTime.of(date.plusDays(1), start), interval);
                 continue;
             }
             return candidate;
@@ -2328,36 +2351,19 @@ public class MainController {
     }
 
     /**
-     * Aligns time to the next boundary that fits both the reminder interval and the time grid
-     * (e.g. interval 30 min, grid 15 min → :00, :30).
+     * Aligns time to the next reminder boundary (interval only, so e.g. 15 min really fires every 15 min).
      */
-    private LocalDateTime alignToReminderInterval(LocalDateTime time, int interval, int timeGridMinutes) {
-        int step = lcm(interval, timeGridMinutes);
+    private LocalDateTime alignToReminderInterval(LocalDateTime time, int interval) {
         LocalDateTime base = time.truncatedTo(ChronoUnit.MINUTES);
         if (time.isAfter(base)) {
             base = base.plusMinutes(1);
         }
         int minute = base.getMinute();
-        int mod = minute % step;
+        int mod = minute % interval;
         if (mod != 0) {
-            base = base.plusMinutes(step - mod);
+            base = base.plusMinutes(interval - mod);
         }
         return base;
-    }
-
-    private static int lcm(int a, int b) {
-        return Math.abs(a * b) / gcd(a, b);
-    }
-
-    private static int gcd(int a, int b) {
-        a = Math.abs(a);
-        b = Math.abs(b);
-        while (b != 0) {
-            int t = b;
-            b = a % b;
-            a = t;
-        }
-        return a;
     }
 
     /** Result of suggestion: range to suggest, or blocked (user is inside an activity that ends in the future). */
@@ -2430,6 +2436,16 @@ public class MainController {
         List<Activity> todays = getTodaysActivitiesForSuggestion(customer, project, today);
         Activity containingNow = findActivityContainingNow(todays, now);
         LocalDateTime lastEndBeforeNow = findLastEndBeforeNow(todays, now);
+        // When same customer/project as last activity, ensure its end is used as start for next suggestion (carry-over).
+        if (lastActivity != null && customer != null && project != null
+            && customer.getId().equals(lastActivity.getCustomerId())
+            && project.getId().equals(lastActivity.getProjectId())) {
+            LocalDateTime lastTo = Activity.parseStoredDateTime(lastActivity.getTo());
+            if (lastTo != null && lastTo.toLocalDate().equals(today) && !lastTo.isAfter(nowOnGrid)
+                && (lastEndBeforeNow == null || lastTo.isAfter(lastEndBeforeNow))) {
+                lastEndBeforeNow = lastTo;
+            }
+        }
 
         boolean lastEndInFuture = false;
         Activity last = null;
@@ -2460,12 +2476,12 @@ public class MainController {
             }
         }
 
-        if (lastEndBeforeNow != null && !lastEndBeforeNow.isBefore(nowOnGrid)) {
+        if (lastEndBeforeNow != null && lastEndBeforeNow.isAfter(nowOnGrid)) {
             lastEndBeforeNow = null;
         }
         LocalDateTime from = lastEndBeforeNow != null ? alignToTimeGrid(lastEndBeforeNow, timeGridMinutes) : nowOnGrid.minusHours(1);
         LocalDateTime to = nowOnGrid;
-        if (!from.isBefore(to)) {
+        if (from.isAfter(to)) {
             from = nowOnGrid.minusHours(1);
         }
         return new PromptSuggestion(capEndTimeToNow(from, to, nowOnGrid), false, null);
@@ -3868,7 +3884,7 @@ public class MainController {
             LocalTime end = parseTimeValue(data.reminderEnd, LocalTime.of(17, 0));
             settings.setReminderWindow(start, end);
             Set<DayOfWeek> weekdays = parseWeekdaysValue(data.reminderWeekdays);
-            if (weekdays != null && !weekdays.isEmpty()) {
+            if (weekdays != null) {
                 settings.setReminderWeekdays(weekdays);
             }
         }

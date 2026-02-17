@@ -109,8 +109,11 @@ public class SettingsService {
     }
 
     private Set<DayOfWeek> parseWeekdaysValue(String value) {
-        if (value == null || value.isBlank()) {
+        if (value == null) {
             return null;
+        }
+        if (value.isBlank()) {
+            return EnumSet.noneOf(DayOfWeek.class);
         }
         try {
             Set<DayOfWeek> result = EnumSet.noneOf(DayOfWeek.class);

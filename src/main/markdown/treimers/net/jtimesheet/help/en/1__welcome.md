@@ -11,5 +11,6 @@ This manual helps you record and manage your working time by customer, project, 
 - [Activities](1_3_activities.html) – Adding and editing activities
 - [Manage](1_4_manage.html) – Customers, projects, and tasks
 - [File Operations](1_5_file.html) – Import, export, and timesheet
+- [Reminder and Time Grid](1_6_reminder.html) – When the reminder runs, dialog open, time grid
 
 Choose a topic from the left to continue.

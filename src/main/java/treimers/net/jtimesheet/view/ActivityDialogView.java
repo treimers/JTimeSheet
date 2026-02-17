@@ -3,6 +3,7 @@ package treimers.net.jtimesheet.view;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -364,17 +365,24 @@ public class ActivityDialogView {
 
         if (endTimeRefreshIntervalMinutes > 0) {
             Timeline[] endTimeRefreshTimeline = { null };
+            final int intervalMin = endTimeRefreshIntervalMinutes;
             dialog.setOnShown(event -> {
-                endTimeRefreshTimeline[0] = new Timeline(new KeyFrame(
-                    Duration.minutes(endTimeRefreshIntervalMinutes),
-                    e -> refreshEndTimeToNow(
-                        datePicker, fromHourChoice, fromMinuteChoice,
-                        toHourChoice, toMinuteChoice, durationTextField,
-                        updating, timeGridMinutes
-                    )
-                ));
-                endTimeRefreshTimeline[0].setCycleCount(Timeline.INDEFINITE);
-                endTimeRefreshTimeline[0].play();
+                Runnable refresh = () -> refreshEndTimeToNow(
+                    datePicker, fromHourChoice, fromMinuteChoice,
+                    toHourChoice, toMinuteChoice, durationTextField,
+                    updating, timeGridMinutes
+                );
+                long delayMs = delayMillisUntilNextIntervalBoundary(intervalMin);
+                Timeline first = new Timeline(new KeyFrame(javafx.util.Duration.millis(Math.max(1, delayMs)), e -> {
+                    refresh.run();
+                    endTimeRefreshTimeline[0] = new Timeline(new KeyFrame(
+                        Duration.minutes(intervalMin),
+                        e2 -> refresh.run()
+                    ));
+                    endTimeRefreshTimeline[0].setCycleCount(Timeline.INDEFINITE);
+                    endTimeRefreshTimeline[0].play();
+                }));
+                first.play();
             });
             dialog.setOnHidden(event -> {
                 if (endTimeRefreshTimeline[0] != null) {
@@ -384,6 +392,25 @@ public class ActivityDialogView {
         }
 
         return dialog.showAndWait();
+    }
+
+    /**
+     * Milliseconds from now until the next interval boundary (e.g. for 15 min: next :00, :15, :30, :45).
+     * If we are on or past the boundary, returns 1 so the refresh runs almost immediately.
+     */
+    private static long delayMillisUntilNextIntervalBoundary(int intervalMinutes) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime base = now.truncatedTo(ChronoUnit.MINUTES);
+        if (now.isAfter(base)) {
+            base = base.plusMinutes(1);
+        }
+        int minute = base.getMinute();
+        int mod = minute % intervalMinutes;
+        if (mod != 0) {
+            base = base.plusMinutes(intervalMinutes - mod);
+        }
+        long ms = java.time.Duration.between(now, base).toMillis();
+        return ms <= 0 ? 1 : ms; // on or past boundary → run almost immediately
     }
 
     /**

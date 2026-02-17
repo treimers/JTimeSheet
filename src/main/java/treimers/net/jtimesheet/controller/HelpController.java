@@ -110,7 +110,8 @@ public class HelpController implements Initializable {
             i18n("help.toc.gettingstarted"),
             i18n("help.toc.activities"),
             i18n("help.toc.manage"),
-            i18n("help.toc.file")
+            i18n("help.toc.file"),
+            i18n("help.toc.reminder")
         };
         String[] links = {
             "1__welcome",
@@ -118,7 +119,8 @@ public class HelpController implements Initializable {
             "1_2_gettingstarted",
             "1_3_activities",
             "1_4_manage",
-            "1_5_file"
+            "1_5_file",
+            "1_6_reminder"
         };
         for (int i = 0; i < links.length; i++) {
             linkIds.add(links[i]);

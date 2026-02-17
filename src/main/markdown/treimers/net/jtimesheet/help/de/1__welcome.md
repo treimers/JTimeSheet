@@ -11,5 +11,6 @@ Dieses Handbuch hilft Ihnen, Arbeitszeiten nach Kunde, Projekt und Aufgabe zu er
 - [Aktivitäten](1_3_activities.html) – Aktivitäten anlegen und bearbeiten
 - [Verwalten](1_4_manage.html) – Kunden, Projekte und Aufgaben
 - [Datei](1_5_file.html) – Import, Export und Stundenzettel
+- [Reminder und Zeitraster](1_6_reminder.html) – Wann der Reminder greift, Dialog offen, Zeitraster
 
 Wählen Sie links ein Thema aus.

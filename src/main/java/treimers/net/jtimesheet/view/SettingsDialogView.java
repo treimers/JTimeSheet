@@ -303,9 +303,6 @@ public class SettingsDialogView {
                 selectedWeekdays.add(e.getKey());
             }
         }
-        if (selectedWeekdays.isEmpty()) {
-            selectedWeekdays = EnumSet.range(DayOfWeek.MONDAY, DayOfWeek.FRIDAY);
-        }
         return Optional.of(new SettingsResult(
             timeGridChoice.getValue(),
             reminderIntervalChoice.getValue(),

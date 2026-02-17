@@ -62,12 +62,12 @@ public class AppSettings {
     }
 
     public Set<DayOfWeek> getReminderWeekdays() {
-        return reminderWeekdays != null ? reminderWeekdays : EnumSet.range(DayOfWeek.MONDAY, DayOfWeek.FRIDAY);
+        return reminderWeekdays != null ? reminderWeekdays : EnumSet.noneOf(DayOfWeek.class);
     }
 
     public void setReminderWeekdays(Set<DayOfWeek> weekdays) {
         reminderWeekdays = (weekdays == null || weekdays.isEmpty())
-            ? EnumSet.range(DayOfWeek.MONDAY, DayOfWeek.FRIDAY)
+            ? EnumSet.noneOf(DayOfWeek.class)
             : EnumSet.copyOf(weekdays);
     }
 
