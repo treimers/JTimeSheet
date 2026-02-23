@@ -65,6 +65,7 @@ import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
+import javafx.collections.transformation.SortedList;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.Scene;
@@ -147,6 +148,7 @@ public class MainController {
     private TableView<Activity> activityTable;
     private Stage primaryStage;
     private FilteredList<Activity> filteredActivities;
+    private SortedList<Activity> sortedActivities;
     private Activity lastActivity;
     private PauseTransition reminderDelay;
     /** When true, next schedule shows reminder immediately if we're in the reminder window (e.g. on startup). */
@@ -602,7 +604,9 @@ public class MainController {
 
     private TableView<Activity> createActivityTable() {
         filteredActivities = new FilteredList<>(activities, activity -> true);
-        TableView<Activity> table = new TableView<>(filteredActivities);
+        sortedActivities = new SortedList<>(filteredActivities);
+        sortedActivities.setComparator(Comparator.comparing(a -> Activity.parseStoredDateTime(a.getFrom()), Comparator.nullsLast(Comparator.naturalOrder())));
+        TableView<Activity> table = new TableView<>(sortedActivities);
 
         customerColumn = new TableColumn<>(i18n("table.customer"));
         customerColumn.setCellValueFactory(cell ->
@@ -654,6 +658,7 @@ public class MainController {
         table.getColumns().add(durationColumn);
         table.getColumns().add(dailyTotalColumn);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        table.setSortPolicy(null);
 
         contextAddActivityItem = menuItemWithIcon(i18n("menu.activity.add"), "add", this::addActivity);
         contextEditActivityItem = menuItemWithIcon(i18n("menu.activity.edit"), "edit", this::editActivity);
@@ -688,7 +693,7 @@ public class MainController {
 
     /** Creates a TableView for a dynamic view tab: same columns and data as main table, own context menu. */
     private TableView<Activity> createViewActivityTable() {
-        TableView<Activity> table = new TableView<>(filteredActivities);
+        TableView<Activity> table = new TableView<>(sortedActivities);
         TableColumn<Activity, String> colCustomer = new TableColumn<>(i18n("table.customer"));
         colCustomer.setCellValueFactory(cell ->
             new SimpleStringProperty(resolveCustomerName(cell.getValue().getCustomerId())));
@@ -729,6 +734,7 @@ public class MainController {
         table.getColumns().add(colDuration);
         table.getColumns().add(colDailyTotal);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        table.setSortPolicy(null);
 
         MenuItem addItem = menuItemWithIcon(i18n("menu.activity.add"), "add", this::addActivity);
         MenuItem editItem = menuItemWithIcon(i18n("menu.activity.edit"), "edit", this::editActivity);
