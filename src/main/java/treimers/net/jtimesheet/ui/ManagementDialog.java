@@ -29,6 +29,7 @@ import javafx.scene.control.Separator;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.control.Dialog;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.ToolBar;
 import javafx.scene.control.TreeItem;
@@ -136,6 +137,7 @@ public class ManagementDialog {
                 alert.setTitle(i18n("management.title"));
                 alert.setHeaderText(null);
                 alert.setContentText(validationError);
+                addEscapeToClose(alert);
                 alert.showAndWait();
                 return;
             }
@@ -769,6 +771,7 @@ public class ManagementDialog {
         dialog.setTitle(title);
         dialog.setHeaderText(header);
         dialog.setContentText(i18n("label.name"));
+        addEscapeToClose(dialog);
         return dialog.showAndWait().map(String::trim).filter(value -> !value.isEmpty());
     }
 
@@ -778,13 +781,26 @@ public class ManagementDialog {
         Alert alert = new Alert(AlertType.CONFIRMATION, content, delete, cancel);
         alert.setTitle(title);
         alert.setHeaderText(null);
+        addEscapeToClose(alert);
         return alert.showAndWait().orElse(cancel) == delete;
     }
 
     private void showInfo(String message) {
         Alert alert = new Alert(AlertType.INFORMATION, message, ButtonType.OK);
         alert.setHeaderText(null);
+        addEscapeToClose(alert);
         alert.showAndWait();
+    }
+
+    private static void addEscapeToClose(Dialog<?> dialog) {
+        dialog.setOnShown(e -> {
+            dialog.getDialogPane().getScene().addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
+                if (ev.getCode() == KeyCode.ESCAPE) {
+                    dialog.close();
+                    ev.consume();
+                }
+            });
+        });
     }
 
     private void sortCustomers() {

@@ -2,70 +2,92 @@ package treimers.net.jtimesheet.service;
 
 import static javafx.util.Duration.millis;
 
-import java.time.Duration;
-import java.time.LocalDate;
+import java.time.DayOfWeek;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import javafx.animation.PauseTransition;
 import treimers.net.jtimesheet.model.AppSettings;
 
+/**
+ * Runs a timer every full minute and calls a callback. The callback should use
+ * {@link #isReminderDue(LocalDateTime, AppSettings)} to decide whether to show the reminder dialog.
+ * For tests, call {@link #tick(LocalDateTime)} with a fixed time instead of waiting for the timer.
+ */
 public class ReminderService {
-    private PauseTransition reminderDelay;
 
-    public void start(AppSettings settings, Runnable onReminder) {
+    private static final long TICK_INTERVAL_MS = 60_000L;
+
+    private PauseTransition minuteTimer;
+    private Consumer<LocalDateTime> onTick;
+
+    /**
+     * Starts a timer that calls {@code onTick} every full minute with the current time.
+     * Does not call onTick immediately (no reminder on startup).
+     */
+    public void start(AppSettings settings, Consumer<LocalDateTime> onTick) {
         stop();
-        scheduleNextReminder(settings, onReminder);
+        this.onTick = onTick;
+        minuteTimer = new PauseTransition(millis(TICK_INTERVAL_MS));
+        minuteTimer.setOnFinished(event -> {
+            if (this.onTick != null) {
+                this.onTick.accept(LocalDateTime.now());
+            }
+            if (minuteTimer != null) {
+                minuteTimer.playFromStart();
+            }
+        });
+        minuteTimer.play();
+    }
+
+    /**
+     * For testing: invokes the tick callback with the given time without waiting for the timer.
+     * Has no effect if {@link #start(AppSettings, Consumer)} was not called.
+     */
+    public void tick(LocalDateTime now) {
+        if (onTick != null) {
+            onTick.accept(now);
+        }
     }
 
     public void stop() {
-        if (reminderDelay != null) {
-            reminderDelay.stop();
+        if (minuteTimer != null) {
+            minuteTimer.stop();
+            minuteTimer = null;
         }
+        onTick = null;
     }
 
-    private void scheduleNextReminder(AppSettings settings, Runnable onReminder) {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime next = nextReminderTime(now, settings);
-        Duration delay = Duration.between(now, next);
-        if (delay.isNegative()) {
-            delay = Duration.ZERO;
+    /**
+     * Returns true if a reminder dialog should be shown at the given time: the time is within the
+     * reminder window (weekday, start–end) and exactly on a reminder interval boundary (e.g. :00, :15, :30, :45 for 15 min).
+     */
+    public boolean isReminderDue(LocalDateTime now, AppSettings settings) {
+        if (!isWithinReminderWindow(now, settings)) {
+            return false;
         }
-        reminderDelay = new PauseTransition(millis(delay.toMillis()));
-        reminderDelay.setOnFinished(event -> {
-            onReminder.run();
-            scheduleNextReminder(settings, onReminder);
-        });
-        reminderDelay.play();
-    }
-
-    private LocalDateTime nextReminderTime(LocalDateTime now, AppSettings settings) {
         int interval = AppSettings.normalizeReminderIntervalMinutes(settings.getReminderIntervalMinutes());
-        LocalTime start = settings.getReminderStartTime();
-        LocalTime end = settings.getReminderEndTime();
-        LocalDateTime candidate = alignToReminderInterval(now, interval);
-
-        while (true) {
-            LocalDate date = candidate.toLocalDate();
-            LocalDateTime windowStart = LocalDateTime.of(date, start);
-            LocalDateTime windowEnd = LocalDateTime.of(date, end);
-            if (candidate.isBefore(windowStart)) {
-                candidate = alignToReminderInterval(windowStart, interval);
-            }
-            if (candidate.isAfter(windowEnd)) {
-                candidate = alignToReminderInterval(LocalDateTime.of(date.plusDays(1), start), interval);
-                continue;
-            }
-            return candidate;
-        }
+        LocalDateTime truncated = now.truncatedTo(ChronoUnit.MINUTES);
+        LocalDateTime aligned = alignToReminderInterval(truncated, interval);
+        return truncated.equals(aligned);
     }
 
-    private LocalDateTime alignToReminderInterval(LocalDateTime time, int interval) {
-        LocalDateTime base = time.truncatedTo(ChronoUnit.MINUTES);
-        if (time.isAfter(base)) {
-            base = base.plusMinutes(1);
+    private boolean isWithinReminderWindow(LocalDateTime now, AppSettings settings) {
+        Set<DayOfWeek> weekdays = settings.getReminderWeekdays();
+        if (weekdays == null || weekdays.isEmpty()) {
+            return false;
         }
+        if (!weekdays.contains(now.getDayOfWeek())) {
+            return false;
+        }
+        return !now.toLocalTime().isBefore(settings.getReminderStartTime())
+                && !now.toLocalTime().isAfter(settings.getReminderEndTime());
+    }
+
+    private static LocalDateTime alignToReminderInterval(LocalDateTime time, int interval) {
+        LocalDateTime base = time.truncatedTo(ChronoUnit.MINUTES);
         int minute = base.getMinute();
         int mod = minute % interval;
         if (mod != 0) {

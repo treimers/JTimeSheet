@@ -1,7 +1,5 @@
 package treimers.net.jtimesheet.controller;
 
-import static javafx.util.Duration.millis;
-
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
@@ -16,7 +14,6 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.WeekFields;
 import java.util.ArrayList;
@@ -50,7 +47,6 @@ import com.calendarfx.view.WeekView;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
-import javafx.animation.PauseTransition;
 import javafx.application.HostServices;
 import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
@@ -71,6 +67,7 @@ import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
+import javafx.scene.control.Dialog;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar.ButtonData;
 import javafx.scene.control.ButtonType;
@@ -113,6 +110,9 @@ import treimers.net.jtimesheet.model.Project;
 import treimers.net.jtimesheet.model.Task;
 import treimers.net.jtimesheet.model.ViewLevel;
 import treimers.net.jtimesheet.model.ViewTabState;
+import treimers.net.jtimesheet.service.ReminderService;
+import treimers.net.jtimesheet.service.ReminderSuggestion;
+import treimers.net.jtimesheet.service.ReminderSuggestionLogic;
 import treimers.net.jtimesheet.service.SettingsService;
 import treimers.net.jtimesheet.service.StorageService;
 import treimers.net.jtimesheet.service.TimesheetWriter;
@@ -150,9 +150,10 @@ public class MainController {
     private FilteredList<Activity> filteredActivities;
     private SortedList<Activity> sortedActivities;
     private Activity lastActivity;
-    private PauseTransition reminderDelay;
-    /** When true, next schedule shows reminder immediately if we're in the reminder window (e.g. on startup). */
-    private boolean reminderShowImmediatelyIfInWindow;
+    private final ReminderService reminderService = new ReminderService();
+    private final ReminderSuggestionLogic reminderSuggestionLogic = new ReminderSuggestionLogic();
+    /** When reminder showed a gap and user didn't add, re-show same range (don't extend end). Cleared when user adds. */
+    private LocalDateTime[] lastShownGapRange;
     private final Preferences preferences = Preferences.userRoot().node("net/treimers/jtimesheet");
     private final SettingsService settingsService;
     private final StorageService storageService;
@@ -455,12 +456,24 @@ public class MainController {
         }
     }
 
+    private static void addEscapeToClose(Dialog<?> dialog) {
+        dialog.setOnShown(e -> {
+            dialog.getDialogPane().getScene().addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
+                if (ev.getCode() == KeyCode.ESCAPE) {
+                    dialog.close();
+                    ev.consume();
+                }
+            });
+        });
+    }
+
     private void showAlert(AlertType type, String title, String content) {
         Alert alert = new Alert(type);
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(content);
         alert.initOwner(primaryStage);
+        addEscapeToClose(alert);
         alert.showAndWait();
     }
 
@@ -1522,6 +1535,7 @@ public class MainController {
         dialog.getDialogPane().setContent(form);
         ButtonType ok = new ButtonType(i18n("button.save"), ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(ok, ButtonType.CANCEL);
+        addEscapeToClose(dialog);
 
         Optional<ButtonType> result = dialog.showAndWait();
         if (result.isEmpty() || result.get() != ok) {
@@ -2165,6 +2179,7 @@ public class MainController {
         area.setWrapText(true);
         area.setPrefRowCount(Math.min(groups.size() + 1, 12));
         alert.getDialogPane().setContent(area);
+        addEscapeToClose(alert);
         Optional<ButtonType> result = alert.showAndWait();
         return result.isPresent() && result.get().getButtonData() == ButtonData.OK_DONE;
     }
@@ -2273,154 +2288,75 @@ public class MainController {
     }
 
     private void startReminderScheduler() {
-        if (reminderDelay != null) {
-            reminderDelay.stop();
-        }
-        reminderShowImmediatelyIfInWindow = true;
-        scheduleNextReminder();
+        reminderService.start(settings, now -> Platform.runLater(() -> onReminderFired(now)));
     }
 
     /**
-     * Schedules the next reminder popup. The timer fires at the next interval boundary
-     * within the reminder window (Settings: Reminder Start–End). Called on startup and after saving settings.
+     * Called every full minute by the reminder timer (on JavaFX thread). Decides whether to show the reminder dialog.
+     * Accepts {@code now} for testability. No reminder on startup (rule 1); only show on interval boundary within window (rule 2).
      */
-    private void scheduleNextReminder() {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime next = nextReminderTime(now);
-        Duration delay = Duration.between(now, next);
-        if (delay.isNegative()) {
-            delay = Duration.ZERO;
-        }
-        long delayMs = delay.toMillis();
-        if (delayMs <= 0) {
-            Platform.runLater(() -> {
-                openAddOrPromptActivityDialog(i18n("activity.add.title"), LocalDateTime.now(), true);
-                scheduleNextReminder();
-            });
+    void onReminderFired(LocalDateTime now) {
+        if (!reminderService.isReminderDue(now, settings)) {
             return;
         }
-        if (reminderShowImmediatelyIfInWindow && isNowWithinReminderWindow()) {
-            reminderShowImmediatelyIfInWindow = false;
-            Platform.runLater(() -> {
-                openAddOrPromptActivityDialog(i18n("activity.add.title"), LocalDateTime.now(), true);
-                scheduleNextReminder();
-            });
+        ReminderSuggestion s = reminderSuggestionLogic.compute(
+                now,
+                new ArrayList<>(activities),
+                new ArrayList<>(customers),
+                lastActivity,
+                null,
+                null,
+                settings,
+                true);
+        if (s.isBlockedForReminder()) {
             return;
         }
-        reminderDelay = new PauseTransition(millis(delayMs));
-        reminderDelay.setOnFinished(event -> {
-            Platform.runLater(() -> {
-                openAddOrPromptActivityDialog(i18n("activity.add.title"), LocalDateTime.now(), true);
-                scheduleNextReminder();
-            });
-        });
-        reminderDelay.play();
-    }
-
-    /** True if current time is within reminder window (today's start–end and a reminder weekday). */
-    private boolean isNowWithinReminderWindow() {
-        LocalDateTime now = LocalDateTime.now();
-        if (!settings.getReminderWeekdays().contains(now.getDayOfWeek())) {
-            return false;
-        }
-        LocalTime t = now.toLocalTime();
-        return !t.isBefore(settings.getReminderStartTime()) && !t.isAfter(settings.getReminderEndTime());
-    }
-
-    private LocalDateTime nextReminderTime(LocalDateTime now) {
-        Set<DayOfWeek> weekdays = settings.getReminderWeekdays();
-        if (weekdays.isEmpty()) {
-            return now.plusYears(1);
-        }
-        int interval = AppSettings.normalizeReminderIntervalMinutes(settings.getReminderIntervalMinutes());
-        LocalTime start = settings.getReminderStartTime();
-        LocalTime end = settings.getReminderEndTime();
-        LocalDateTime candidate = alignToReminderInterval(now, interval);
-
-        while (true) {
-            LocalDate date = candidate.toLocalDate();
-            if (!weekdays.contains(date.getDayOfWeek())) {
-                candidate = alignToReminderInterval(LocalDateTime.of(date.plusDays(1), start), interval);
-                continue;
+        LocalDateTime[] range;
+        if (lastShownGapRange != null) {
+            range = lastShownGapRange;
+        } else {
+            range = s.getRange();
+            if (s.getSuggestionType() == ReminderSuggestion.SuggestionType.GAP) {
+                lastShownGapRange = new LocalDateTime[] { range[0], range[1] };
+            } else {
+                lastShownGapRange = null;
             }
-            LocalDateTime windowStart = LocalDateTime.of(date, start);
-            LocalDateTime windowEnd = LocalDateTime.of(date, end);
-            if (candidate.isBefore(windowStart)) {
-                candidate = alignToReminderInterval(windowStart, interval);
-            }
-            if (candidate.isAfter(windowEnd)) {
-                candidate = alignToReminderInterval(LocalDateTime.of(date.plusDays(1), start), interval);
-                continue;
-            }
-            return candidate;
         }
+        openAddOrPromptActivityDialogWithSuggestion(i18n("activity.add.title"), now, s, range);
     }
 
     /**
-     * Aligns time to the next reminder boundary (interval only, so e.g. 15 min really fires every 15 min).
+     * Opens the add activity dialog with the given reminder suggestion and range.
+     * When user adds an activity, {@link #lastShownGapRange} is cleared (rule 9).
      */
-    private LocalDateTime alignToReminderInterval(LocalDateTime time, int interval) {
-        LocalDateTime base = time.truncatedTo(ChronoUnit.MINUTES);
-        if (time.isAfter(base)) {
-            base = base.plusMinutes(1);
-        }
-        int minute = base.getMinute();
-        int mod = minute % interval;
-        if (mod != 0) {
-            base = base.plusMinutes(interval - mod);
-        }
-        return base;
-    }
-
-    /** Result of suggestion: range to suggest, or blocked (user is inside an activity that ends in the future). */
-    private static class PromptSuggestion {
-        final LocalDateTime[] range;
-        final boolean blocked;
-        final LocalDateTime blockedUntil;
-
-        PromptSuggestion(LocalDateTime[] range, boolean blocked, LocalDateTime blockedUntil) {
-            this.range = range;
-            this.blocked = blocked;
-            this.blockedUntil = blockedUntil;
-        }
-    }
-
-    /** Opens the add activity dialog with shared defaults (last or first customer/project/task). If overlap is found and user cancels the overlap dialog, the add dialog is shown again with the same values. When fromReminder and user is inside an activity until future, dialog is not shown. When from Add Activity and blocked, user is informed by dialog. */
-    private void openAddOrPromptActivityDialog(String title, LocalDateTime now, boolean fromReminder) {
-        Customer defaultCustomer = getDefaultCustomerForNewActivity();
-        DefaultProjectAndTask defaultPt = defaultCustomer != null ? getLastProjectAndTaskForCustomer(defaultCustomer) : null;
-        Project defaultProject = defaultPt != null ? defaultPt.getProject() : null;
-        Task defaultTask = defaultPt != null ? defaultPt.getTask() : null;
-        PromptSuggestion suggestion = computePromptSuggestion(now, defaultCustomer, defaultProject);
-        if (suggestion.blocked) {
-            if (fromReminder) {
-                return;
-            }
-            String untilStr = suggestion.blockedUntil != null ? TIME_FORMAT.format(suggestion.blockedUntil.toLocalTime()) : "";
-            showInfo(i18n("activity.blocked.until", untilStr));
-            return;
-        }
-        LocalDateTime[] range = suggestion.range;
+    private void openAddOrPromptActivityDialogWithSuggestion(
+            String title,
+            LocalDateTime now,
+            ReminderSuggestion suggestion,
+            LocalDateTime[] range) {
+        Customer defaultCustomer = suggestion.resolveCustomer(customers);
+        Project defaultProject = suggestion.resolveProject(defaultCustomer);
+        Task defaultTask = suggestion.resolveTask(defaultProject);
         ActivityInput reopenWith = null;
         while (true) {
             Optional<ActivityInput> input = showActivityDialog(
-                title,
-                null,
-                reopenWith != null ? reopenWith.getFrom() : range[0],
-                reopenWith != null ? reopenWith.getTo() : range[1],
-                reopenWith != null ? reopenWith.getCustomer() : defaultCustomer,
-                reopenWith != null ? reopenWith.getProject() : defaultProject,
-                reopenWith != null ? reopenWith.getTask() : defaultTask,
-                this::getLastProjectAndTaskForCustomer,
-                this::suggestedPromptRangeForSelection,
-                settings.getReminderIntervalMinutes()
-            );
+                    title,
+                    null,
+                    reopenWith != null ? reopenWith.getFrom() : range[0],
+                    reopenWith != null ? reopenWith.getTo() : range[1],
+                    reopenWith != null ? reopenWith.getCustomer() : defaultCustomer,
+                    reopenWith != null ? reopenWith.getProject() : defaultProject,
+                    reopenWith != null ? reopenWith.getTask() : defaultTask,
+                    this::getLastProjectAndTaskForCustomer,
+                    this::suggestedPromptRangeForSelection,
+                    settings.getReminderIntervalMinutes());
             if (!input.isPresent()) {
                 return;
             }
             ActivityInput activityInput = input.get();
             Optional<ActivityInput> toApply = checkOverlapAndConfirm(activityInput, null);
             if (toApply.isPresent()) {
+                lastShownGapRange = null;
                 addOrMergeActivity(toApply.get());
                 return;
             }
@@ -2429,157 +2365,45 @@ public class MainController {
     }
 
     /**
-     * Suggestion for Reminder / Add Activity:
-     * 1) If last end time is in the future (but today): a) if there is a free slot until now, use it; b) else block (no reminder / inform user).
-     * 2) Else if there is a free slot until now today, suggest it.
-     * 3) Else suggest last hour. End times on other days are ignored.
+     * Opens the add activity dialog (e.g. from menu). Computes suggestion via {@link ReminderSuggestionLogic};
+     * when blocked, shows info message. When from reminder, use {@link #onReminderFired} instead.
      */
-    private PromptSuggestion computePromptSuggestion(LocalDateTime now, Customer customer, Project project) {
-        int timeGridMinutes = AppSettings.normalizeTimeGridMinutes(settings.getTimeGridMinutes());
-        LocalDateTime nowOnGrid = alignToTimeGrid(now, timeGridMinutes);
-        LocalDate today = now.toLocalDate();
-
-        List<Activity> todays = getTodaysActivitiesForSuggestion(customer, project, today);
-        Activity containingNow = findActivityContainingNow(todays, now);
-        LocalDateTime lastEndBeforeNow = findLastEndBeforeNow(todays, now);
-        // When same customer/project as last activity, ensure its end is used as start for next suggestion (carry-over).
-        if (lastActivity != null && customer != null && project != null
-            && customer.getId().equals(lastActivity.getCustomerId())
-            && project.getId().equals(lastActivity.getProjectId())) {
-            LocalDateTime lastTo = Activity.parseStoredDateTime(lastActivity.getTo());
-            if (lastTo != null && lastTo.toLocalDate().equals(today) && !lastTo.isAfter(nowOnGrid)
-                && (lastEndBeforeNow == null || lastTo.isAfter(lastEndBeforeNow))) {
-                lastEndBeforeNow = lastTo;
+    private void openAddOrPromptActivityDialog(String title, LocalDateTime now, boolean fromReminder) {
+        ReminderSuggestion s = reminderSuggestionLogic.compute(
+                now,
+                new ArrayList<>(activities),
+                new ArrayList<>(customers),
+                lastActivity,
+                null,
+                null,
+                settings,
+                fromReminder);
+        if (s.isBlockedForReminder()) {
+            if (fromReminder) {
+                return;
             }
+            // Add Activity: show dialog with start=end=now (duration 0 allowed)
         }
-
-        boolean lastEndInFuture = false;
-        Activity last = null;
-        if (customer != null) {
-            last = project != null
-                ? findLastActivityForProject(customer.getId(), project.getId())
-                : findLastActivityForCustomer(customer.getId());
-        } else if (lastActivity != null) {
-            last = lastActivity;
-        }
-        if (last != null) {
-            LocalDateTime lastTo = Activity.parseStoredDateTime(last.getTo());
-            if (lastTo != null && lastTo.toLocalDate().equals(today) && lastTo.isAfter(nowOnGrid)) {
-                lastEndInFuture = true;
-            }
-        }
-
-        if (lastEndInFuture) {
-            if (containingNow != null) {
-                LocalDateTime end = Activity.parseStoredDateTime(containingNow.getTo());
-                return new PromptSuggestion(null, true, end);
-            }
-            LocalDateTime slotFrom = lastEndBeforeNow != null ? lastEndBeforeNow : today.atStartOfDay();
-            slotFrom = alignToTimeGrid(slotFrom, timeGridMinutes);
-            if (slotFrom.isBefore(nowOnGrid)) {
-                LocalDateTime[] range = capEndTimeToNow(slotFrom, nowOnGrid, nowOnGrid);
-                return new PromptSuggestion(range, false, null);
-            }
-        }
-
-        if (lastEndBeforeNow != null && lastEndBeforeNow.isAfter(nowOnGrid)) {
-            lastEndBeforeNow = null;
-        }
-        LocalDateTime from = lastEndBeforeNow != null ? alignToTimeGrid(lastEndBeforeNow, timeGridMinutes) : nowOnGrid.minusHours(1);
-        LocalDateTime to = nowOnGrid;
-        if (from.isAfter(to)) {
-            from = nowOnGrid.minusHours(1);
-        }
-        return new PromptSuggestion(capEndTimeToNow(from, to, nowOnGrid), false, null);
+        LocalDateTime[] range = s.getRange();
+        openAddOrPromptActivityDialogWithSuggestion(title, now, s, range);
     }
 
-    private List<Activity> getTodaysActivitiesForSuggestion(Customer customer, Project project, LocalDate today) {
-        List<Activity> result = new ArrayList<>();
-        String customerId = customer != null ? customer.getId() : null;
-        String projectId = project != null ? project.getId() : null;
-        for (Activity a : activities) {
-            LocalDateTime from = Activity.parseStoredDateTime(a.getFrom());
-            if (from == null || !from.toLocalDate().equals(today)) {
-                continue;
-            }
-            if (customerId != null && !customerId.equals(a.getCustomerId())) {
-                continue;
-            }
-            if (projectId != null && !projectId.equals(a.getProjectId())) {
-                continue;
-            }
-            result.add(a);
-        }
-        return result;
-    }
-
-    /** Activity that contains "now" (from <= now < to) and ends in the future (to > now). */
-    private Activity findActivityContainingNow(List<Activity> todays, LocalDateTime now) {
-        for (Activity a : todays) {
-            LocalDateTime from = Activity.parseStoredDateTime(a.getFrom());
-            LocalDateTime to = Activity.parseStoredDateTime(a.getTo());
-            if (from == null || to == null) {
-                continue;
-            }
-            if (!from.isAfter(now) && to.isAfter(now)) {
-                return a;
-            }
-        }
-        return null;
-    }
-
-    /** Latest activity end time that is <= now, or null if none (then use start of day). */
-    private LocalDateTime findLastEndBeforeNow(List<Activity> todays, LocalDateTime now) {
-        LocalDateTime last = null;
-        for (Activity a : todays) {
-            LocalDateTime to = Activity.parseStoredDateTime(a.getTo());
-            if (to == null || to.isAfter(now)) {
-                continue;
-            }
-            if (last == null || to.isAfter(last)) {
-                last = to;
-            }
-        }
-        return last;
-    }
-
-    /** Ensures end time is never in the future (reminder / add activity). */
-    private static LocalDateTime[] capEndTimeToNow(LocalDateTime from, LocalDateTime to, LocalDateTime nowOnGrid) {
-        if (!to.isAfter(nowOnGrid)) {
-            return new LocalDateTime[] { from, to };
-        }
-        LocalDateTime cappedTo = nowOnGrid;
-        LocalDateTime cappedFrom = from;
-        if (!cappedFrom.isBefore(cappedTo)) {
-            cappedFrom = cappedTo.minusHours(1);
-            if (cappedFrom.toLocalDate().isBefore(cappedTo.toLocalDate())) {
-                cappedFrom = cappedTo.toLocalDate().atStartOfDay();
-            }
-        }
-        return new LocalDateTime[] { cappedFrom, cappedTo };
-    }
-
-    /** Aligns the given time down to the time grid (for suggested ranges). */
-    private static LocalDateTime alignToTimeGrid(LocalDateTime value, int timeGridMinutes) {
-        int step = AppSettings.normalizeTimeGridMinutes(timeGridMinutes);
-        if (step <= 1) {
-            return value.withSecond(0).withNano(0);
-        }
-        int minute = value.getMinute();
-        int rounded = (minute / step) * step;
-        return value.withMinute(rounded).withSecond(0).withNano(0);
-    }
-
-    /** Callback for Add dialog: returns suggested [from, to] when user changes customer or project. If blocked, returns last hour so the dialog has a valid range. */
+    /** Callback for Add dialog: returns suggested [from, to] when user changes customer or project (rule 8). If blocked, returns last hour so the dialog has a valid range. */
     private LocalDateTime[] suggestedPromptRangeForSelection(Customer customer, Project project) {
-        PromptSuggestion s = computePromptSuggestion(LocalDateTime.now(), customer, project);
-        if (s.range != null) {
-            return s.range;
+        ReminderSuggestion s = reminderSuggestionLogic.compute(
+                LocalDateTime.now(),
+                new ArrayList<>(activities),
+                new ArrayList<>(customers),
+                lastActivity,
+                customer != null ? customer.getId() : null,
+                project != null ? project.getId() : null,
+                settings,
+                false);
+        if (s.getRange() != null) {
+            return s.getRange();
         }
         LocalDateTime now = LocalDateTime.now();
-        int timeGridMinutes = AppSettings.normalizeTimeGridMinutes(settings.getTimeGridMinutes());
-        LocalDateTime nowOnGrid = alignToTimeGrid(now, timeGridMinutes);
-        return new LocalDateTime[] { nowOnGrid.minusHours(1), nowOnGrid };
+        return new LocalDateTime[] { now.minusHours(1), now };
     }
 
     private void importCsv() {
@@ -3190,6 +3014,7 @@ public class MainController {
         Alert alert = new Alert(AlertType.WARNING, content.toString(), buttons.toArray(new ButtonType[0]));
         alert.setTitle(i18n("activity.overlap.title"));
         alert.setHeaderText(null);
+        addEscapeToClose(alert);
         Optional<ButtonType> choice = alert.showAndWait();
         if (!choice.isPresent() || choice.get() == cancel) {
             return Optional.empty();
@@ -3599,17 +3424,6 @@ public class MainController {
         return project.getTasks().isEmpty() ? null : project.getTasks().get(0);
     }
 
-    /** Default customer for new activity: last activity's customer or first customer. */
-    private Customer getDefaultCustomerForNewActivity() {
-        if (lastActivity != null) {
-            Customer c = findCustomerById(lastActivity.getCustomerId());
-            if (c != null) {
-                return c;
-            }
-        }
-        return customers.isEmpty() ? null : customers.get(0);
-    }
-
     /** Last project and task used for the given customer, or first project and first task. */
     private DefaultProjectAndTask getLastProjectAndTaskForCustomer(Customer customer) {
         if (customer == null) {
@@ -3937,6 +3751,7 @@ public class MainController {
         Alert alert = new Alert(AlertType.WARNING, message.toString(), ButtonType.OK);
         alert.setTitle(i18n("i18n.missing.title"));
         alert.setHeaderText(null);
+        addEscapeToClose(alert);
         alert.showAndWait();
     }
 
@@ -4280,12 +4095,14 @@ public class MainController {
         Alert alert = new Alert(AlertType.CONFIRMATION, content, delete, cancel);
         alert.setTitle(title);
         alert.setHeaderText(null);
+        addEscapeToClose(alert);
         return alert.showAndWait().orElse(cancel) == delete;
     }
 
     private void showInfo(String message) {
         Alert alert = new Alert(AlertType.INFORMATION, message, ButtonType.OK);
         alert.setHeaderText(null);
+        addEscapeToClose(alert);
         alert.showAndWait();
     }
 

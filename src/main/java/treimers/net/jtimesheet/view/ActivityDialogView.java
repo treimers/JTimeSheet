@@ -34,6 +34,8 @@ import javafx.scene.control.DatePicker;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -102,12 +104,12 @@ public class ActivityDialogView {
             }
             Customer c = customerChoice.getSelectionModel().getSelectedItem();
             LocalDateTime[] range = suggestedRangeForSelection.apply(c, projectChoice.getSelectionModel().getSelectedItem());
-            if (range == null || range.length != 2 || range[0] == null || range[1] == null || !range[0].isBefore(range[1])) {
+            if (range == null || range.length != 2 || range[0] == null || range[1] == null || range[1].isBefore(range[0])) {
                 return;
             }
             LocalDateTime from = alignToGrid(range[0], timeGridMinutes);
             LocalDateTime to = alignToGrid(range[1], timeGridMinutes);
-            if (!from.isBefore(to)) {
+            if (to.isBefore(from)) {
                 return;
             }
             updating[0] = true;
@@ -344,6 +346,7 @@ public class ActivityDialogView {
                 showInfo(i18n("activity.validation.range"));
                 event.consume();
             }
+            // Duration 0 (from.equals(to)) is allowed
         });
 
         dialog.setResultConverter(button -> {
@@ -361,6 +364,16 @@ public class ActivityDialogView {
                 toHourChoice.getSelectionModel().getSelectedItem(),
                 toMinuteChoice.getSelectionModel().getSelectedItem()
             );
+        });
+
+        dialog.setOnShown(e -> {
+            dialog.getDialogPane().getScene().addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
+                if (ev.getCode() == KeyCode.ESCAPE) {
+                    dialog.setResult(null);
+                    dialog.close();
+                    ev.consume();
+                }
+            });
         });
 
         if (endTimeRefreshIntervalMinutes > 0) {
@@ -439,7 +452,7 @@ public class ActivityDialogView {
         try {
             setTimeSelection(toHourChoice, toMinuteChoice, to.getHour(), to.getMinute(), timeGridMinutes);
             LocalDateTime from = buildDateTimeOrNull(selectedDate, fromHourChoice.getValue(), fromMinuteChoice.getValue());
-            if (from != null && from.isBefore(to)) {
+            if (from != null && !to.isBefore(from)) {
                 durationTextField.setText(formatDuration(from, to));
             }
         } finally {
@@ -691,6 +704,14 @@ public class ActivityDialogView {
     private void showInfo(String message) {
         Alert alert = new Alert(AlertType.INFORMATION, message, ButtonType.OK);
         alert.setHeaderText(null);
+        alert.setOnShown(e -> {
+            alert.getDialogPane().getScene().addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
+                if (ev.getCode() == KeyCode.ESCAPE) {
+                    alert.close();
+                    ev.consume();
+                }
+            });
+        });
         alert.showAndWait();
     }
 

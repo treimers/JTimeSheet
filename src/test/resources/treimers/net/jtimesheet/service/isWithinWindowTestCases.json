@@ -1,0 +1,32 @@
+{
+  "_fileDescription": "Testfälle für ReminderSuggestionLogic.isNowWithinReminderWindow(now, settings). Prüft nur, ob die aktuelle Zeit im Reminder-Fenster liegt (Wochentag + Uhrzeit zwischen windowStart und windowEnd). Kein Intervall-Check.",
+  "_structure": "defaultSettings (windowStart, windowEnd, timeGridMinutes, weekdays); cases[]: description, now (ISO), expected (boolean).",
+  "defaultSettings": {
+    "windowStart": "09:00",
+    "windowEnd": "17:00",
+    "timeGridMinutes": 15,
+    "weekdays": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]
+  },
+  "cases": [
+    {
+      "description": "Szenario 2: Vor Fenster-Start → nicht im Fenster",
+      "now": "2025-02-03T08:30",
+      "expected": false
+    },
+    {
+      "description": "Szenario 2: Nach Fenster-Ende → nicht im Fenster",
+      "now": "2025-02-03T18:00",
+      "expected": false
+    },
+    {
+      "description": "Szenario 2: Kein Reminder-Wochentag (z. B. Samstag) → nicht im Fenster",
+      "now": "2025-02-01T10:00",
+      "expected": false
+    },
+    {
+      "description": "Szenario 2: Innerhalb Fenster und Wochentag → im Fenster",
+      "now": "2025-02-03T10:00",
+      "expected": true
+    }
+  ]
+}

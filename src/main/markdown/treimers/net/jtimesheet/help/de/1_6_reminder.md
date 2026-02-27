@@ -17,35 +17,50 @@ Der **Reminder** öffnet in einstellbaren Abständen einen Dialog zum Erfassen e
 
 ---
 
-## Wann greift was?
+## Wann erscheint der Reminder?
 
 | Situation | Verhalten |
 |-----------|-----------|
-| **Programmstart** | Liegt die aktuelle Zeit im Reminder-Fenster (Start–Ende, Wochentag), erscheint der Reminder-Dialog **sofort** – Sie müssen nicht bis zur nächsten Intervall-Grenze warten. |
-| **Während der Laufzeit** | Der nächste Reminder wird auf die **nächste Intervall-Grenze** geplant (z. B. bei 15 min: 9:00, 9:15, 9:30, …). Nur innerhalb des Fensters und an konfigurierten Wochentagen. |
+| **Programmstart** | **Kein Reminder** – beim Start erscheint kein Dialog. Der erste Reminder wird auf die **nächste Intervall-Grenze** im Fenster geplant (z. B. Start um 11:04 → erster Reminder 11:15). |
+| **Während der Laufzeit** | Der nächste Reminder wird auf die **nächste Intervall-Grenze** geplant (z. B. bei 15 min: 9:00, 9:15, 9:30, …). Nur **innerhalb** des Fensters (Start–Ende) und an konfigurierten **Reminder-Wochentagen**. |
+| **Außerhalb des Fensters / anderer Wochentag** | **Kein Reminder**; der nächste Termin wird auf den nächsten gültigen Zeitpunkt (nächster Tag bzw. Fensterbeginn) geplant. |
+| **Letzte Aktivität endet in der Zukunft** | **Kein Reminder** – Sie befinden sich z. B. in einer laufenden Aktivität, die erst später endet. Der nächste Reminder kommt zur nächsten Intervall-Grenze. |
 | **Nach Schließen des Dialogs** | Die nächste Anzeige ist wieder zur nächsten Intervall-Grenze (z. B. Dialog um 10:15 geschlossen → nächster Reminder 10:30). |
-| **Dialog bleibt offen** | Die **Endezeit** im Dialog wird automatisch mitgeführt: Bei jeder **Reminder-Intervall-Grenze** (z. B. jede Viertelstunde) wird „Bis“ auf die aktuelle Zeit (am Zeitraster ausgerichtet) gesetzt und die Dauer neu berechnet. Nur wenn das gewählte Datum **heute** ist. |
-| **Außerhalb des Fensters / anderer Wochentag** | Kein Reminder; der nächste Termin wird auf den nächsten gültigen Zeitpunkt (nächster Tag bzw. Fensterbeginn) geplant. |
+
+---
+
+## Was wird im Reminder-Dialog vorgeschlagen?
+
+Der Reminder schlägt **Kunde, Projekt, Aufgabe** und ein **Zeitintervall (Von–Bis)** vor. Die Logik:
+
+| Situation | Vorschlag |
+|-----------|-----------|
+| **Keine Aktivität heute** (über alle Kunden) | **Letzter Kunde** (bzw. letzte Kundenaktivität) als Standard; falls es gar **keine vergangenen Aktivitäten** gibt: **erster Kunde**, **erstes Projekt**, **erste Aufgabe**. Zeit: **Von = jetzt − 1 Stunde**, **Bis = jetzt**. |
+| **Letzte Aktivität heute endete in der Vergangenheit** | Diese Aktivität als Standard (Kunde/Projekt/Aufgabe). Zeit: **Von = Ende der letzten Aktivität**, **Bis = jetzt** (die „Lücke“ bis zum aktuellen Zeitpunkt). |
+| **Kundenwechsel im Dialog** | Für den gewählten Kunden: **letzte Aktivität** dieses Kunden (auch an früheren Tagen) als Standard, sonst **erstes Projekt** und **erste Aufgabe** dieses Kunden. Zeit: gleiche Logik wie oben (Lücke oder jetzt−1h bis jetzt). |
+
+**Hinweis:** Über **Aktivität → Aktivität hinzufügen** (ohne Reminder) gilt dieselbe Vorschlagslogik. Liegt das Ende der letzten Aktivität in der **Zukunft** (z. B. laufende Aktivität), erscheint **kein Reminder**. Beim manuellen „Aktivität hinzufügen“ wird in diesem Fall entweder die **letzte Lücke** als Vorschlag angeboten (falls es eine freie Zeit bis jetzt gibt) oder ein Dialog mit **Von = Bis = jetzt** (Dauer 0), damit Sie trotzdem eine Aktivität erfassen können.
 
 ---
 
 ## Ablauf beim Start (Beispiel)
 
 - **Einstellung:** Reminder 9:00–17:00, Mo–Fr, Intervall 15 min.  
-- **Start um 11:04:** Sie sind im Fenster und an einem Reminder-Wochentag → der Reminder-Dialog erscheint **sofort** (nicht erst um 11:15).  
+- **Start um 11:04:** Im Fenster und Reminder-Wochentag → **kein** Dialog sofort; **erster Reminder um 11:15**.  
 - **Start um 08:30:** Vor Fensterbeginn → erster Reminder ist um 9:00.  
 - **Start am Samstag 10:00:** Kein Reminder an diesem Wochentag; erster Reminder am Montag zur nächsten Intervall-Grenze im Fenster.
 
 ---
 
-## Dialog bleibt offen (Endezeit wird mitgeschoben)
+## Dialog bleibt offen (Endezeit wird weitergesetzt)
 
-Wenn Sie den Reminder-Dialog **nicht sofort schließen**, soll die Endezeit mit der Zeit mitgehen:
+Wenn Sie den Reminder-Dialog **offen lassen** und die Endezeit auf **„Bis = jetzt“** stehen lassen:
 
-- Der Dialog öffnet z. B. um 10:15 mit Vorschlag „Bis 10:15“.  
-- Sie lassen ihn offen. Um **10:30** (nächste Intervall-Grenze) wird **„Bis“ automatisch auf 10:30** gesetzt und die Dauer aktualisiert.  
-- Das passiert nur, wenn das im Dialog gewählte Datum **heute** ist.  
-- Der erste Update-Zeitpunkt ist die **nächste Intervall-Grenze** nach dem Öffnen (nicht einfach „Intervall Minuten nach Öffnen“). Danach alle weiteren Intervall-Grenzen, bis der Dialog geschlossen wird.
+- **Standardfall (z. B. keine Aktivität heute, Vorschlag „Von = jetzt−1h, Bis = jetzt“):**  
+  Bei der **nächsten Reminder-Intervall-Grenze** wird **„Bis“ automatisch auf die neue aktuelle Zeit** gesetzt und die Dauer neu berechnet. So können Sie z. B. um 10:15 den Dialog öffnen und um 10:30 erscheint erneut mit „Bis 10:30“.
+- **Wenn der Reminder eine Lücke vorschlägt** (Von = Ende der letzten Aktivität, Bis = jetzt):  
+  Die **Endezeit wird nicht weitergesetzt** – beim nächsten Intervall erscheint der Dialog wieder mit derselben Lücke (gleiches Von–Bis), bis Sie eine Aktivität erfassen oder schließen.
+- Das betrifft nur das **heutige** Datum.
 
 ---
 
@@ -63,5 +78,5 @@ Wenn Sie den Reminder-Dialog **nicht sofort schließen**, soll die Endezeit mit 
 
 - **Fenster:** 9:00–17:00, **Intervall:** 15 min.  
 - Reminder-Termine an einem Werktag: 9:00, 9:15, 9:30, … 16:45, 17:00.  
-- **Start um 11:04** → Dialog sofort.  
-- **Dialog von 10:15 bis 10:50 offen** → „Bis“ wird automatisch um 10:30 und 10:45 auf die aktuelle Zeit gesetzt (wenn Datum = heute).
+- **Start um 11:04** → erster Reminder um 11:15 (kein Dialog sofort).  
+- **Dialog mit Vorschlag „jetzt−1h bis jetzt“ von 10:15 bis 10:50 offen** → „Bis“ wird bei 10:30 und 10:45 auf die aktuelle Zeit gesetzt (wenn Datum = heute). Bei Vorschlag einer **Lücke** bleibt Von–Bis unverändert.

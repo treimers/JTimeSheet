@@ -13,6 +13,8 @@ import java.util.ResourceBundle;
 import javafx.collections.FXCollections;
 import javafx.event.ActionEvent;
 import javafx.geometry.Insets;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.ButtonType;
@@ -157,6 +159,16 @@ public class PauseDialogView {
             return new LocalDateTime[] { pauseStart, pauseEnd };
         });
 
+        dialog.setOnShown(e -> {
+            dialog.getDialogPane().getScene().addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
+                if (ev.getCode() == KeyCode.ESCAPE) {
+                    dialog.setResult(null);
+                    dialog.close();
+                    ev.consume();
+                }
+            });
+        });
+
         return dialog.showAndWait()
             .filter(r -> r != null && r.length == 2);
     }
@@ -213,6 +225,14 @@ public class PauseDialogView {
     private void showInfo(String message) {
         Alert alert = new Alert(AlertType.INFORMATION, message, ButtonType.OK);
         alert.setHeaderText(null);
+        alert.setOnShown(e -> {
+            alert.getDialogPane().getScene().addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
+                if (ev.getCode() == KeyCode.ESCAPE) {
+                    alert.close();
+                    ev.consume();
+                }
+            });
+        });
         alert.showAndWait();
     }
 

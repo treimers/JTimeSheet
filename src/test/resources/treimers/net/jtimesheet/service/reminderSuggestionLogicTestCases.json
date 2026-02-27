@@ -1,0 +1,338 @@
+{
+  "_fileDescription": "Testfälle für ReminderSuggestionLogic.compute(…). Prüft die vollständige Vorschlagslogik: Kunde/Projekt/Task, Zeitbereich (DEFAULT_RANGE vs GAP), blockedForReminder. Szenarien 1–7 (keine Aktivität heute, erste Kunde/Projekt/Task, letztes Ende in Vergangenheit/Zukunft, Add Activity, Kundenwechsel, SuggestionType).",
+  "_structure": "defaultSettings (windowStart, windowEnd, timeGridMinutes, weekdays); computeCases[]: description, setup (customers[], activities[]), input (now, lastActivityIndex, contextCustomerId, contextProjectId, fromReminder), expected (blockedForReminder, suggestionType, customerId, projectId, taskId, range, rangeEndIsNow, rangeStartBeforeNow, rangeStartEqualsEnd, rangeNotNull).",
+  "defaultSettings": {
+    "windowStart": "09:00",
+    "windowEnd": "17:00",
+    "timeGridMinutes": 15,
+    "weekdays": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]
+  },
+  "computeCases": [
+    {
+      "description": "Szenario 3: Letztes Ende nicht in Zukunft → letztes Ende als Vorschlags-Start (keine Lückensuche)",
+      "setup": {
+        "customers": [
+          { "id": "C", "name": "C", "projects": [ { "id": "P", "name": "P", "tasks": [ { "id": "T", "name": "T" } ] } ] }
+        ],
+        "activities": [
+          { "customerId": "C", "projectId": "P", "taskId": "T", "from": "2025-02-03T11:00", "to": "2025-02-03T12:30" }
+        ]
+      },
+      "input": {
+        "now": "2025-02-03T13:00",
+        "lastActivityIndex": null,
+        "contextCustomerId": null,
+        "contextProjectId": null,
+        "fromReminder": true
+      },
+      "expected": {
+        "blockedForReminder": false,
+        "suggestionType": "GAP",
+        "customerId": "C",
+        "projectId": "P",
+        "taskId": "T",
+        "range": ["2025-02-03T12:30", "2025-02-03T13:00"]
+      }
+    },
+    {
+      "description": "Szenario 5: Letztes Ende in Zukunft (Add Activity) → Lücke wird gesucht und vorgeschlagen",
+      "setup": {
+        "customers": [
+          { "id": "C", "name": "C", "projects": [ { "id": "P", "name": "P", "tasks": [ { "id": "T", "name": "T" } ] } ] }
+        ],
+        "activities": [
+          { "customerId": "C", "projectId": "P", "taskId": "T", "from": "2025-02-03T10:00", "to": "2025-02-03T12:00" }
+        ]
+      },
+      "input": {
+        "now": "2025-02-03T09:00",
+        "lastActivityIndex": null,
+        "contextCustomerId": null,
+        "contextProjectId": null,
+        "fromReminder": false
+      },
+      "expected": {
+        "blockedForReminder": false,
+        "suggestionType": "GAP",
+        "rangeEndIsNow": true,
+        "rangeStartBeforeNow": true
+      }
+    },
+    {
+      "description": "Szenario 1: Letzter Kunde und DEFAULT_RANGE (now−1h, now)",
+      "setup": {
+        "customers": [
+          { "id": "A", "name": "A", "projects": [] },
+          { "id": "B", "name": "B", "projects": [ { "id": "P2", "name": "P2", "tasks": [ { "id": "T2", "name": "T2" } ] } ] }
+        ],
+        "activities": [
+          { "customerId": "B", "projectId": "P2", "taskId": "T2", "from": "2025-02-02T09:00", "to": "2025-02-02T10:00" }
+        ]
+      },
+      "input": {
+        "now": "2025-02-03T10:00",
+        "lastActivityIndex": 0,
+        "contextCustomerId": null,
+        "contextProjectId": null,
+        "fromReminder": true
+      },
+      "expected": {
+        "blockedForReminder": false,
+        "suggestionType": "DEFAULT_RANGE",
+        "customerId": "B",
+        "projectId": "P2",
+        "taskId": "T2",
+        "range": ["2025-02-03T09:00", "2025-02-03T10:00"]
+      }
+    },
+    {
+      "description": "Szenario 2: Erster Kunde, erstes Projekt, erste Task, DEFAULT_RANGE",
+      "setup": {
+        "customers": [
+          { "id": "Only", "name": "Only", "projects": [ { "id": "P", "name": "P", "tasks": [ { "id": "T", "name": "T" } ] } ] }
+        ],
+        "activities": []
+      },
+      "input": {
+        "now": "2025-02-03T10:00",
+        "lastActivityIndex": null,
+        "contextCustomerId": null,
+        "contextProjectId": null,
+        "fromReminder": true
+      },
+      "expected": {
+        "blockedForReminder": false,
+        "suggestionType": "DEFAULT_RANGE",
+        "customerId": "Only",
+        "projectId": "P",
+        "taskId": "T",
+        "range": ["2025-02-03T09:00", "2025-02-03T10:00"]
+      }
+    },
+    {
+      "description": "Szenario 2: Keine Kunden → null-IDs, DEFAULT_RANGE",
+      "setup": {
+        "customers": [],
+        "activities": []
+      },
+      "input": {
+        "now": "2025-02-03T10:00",
+        "lastActivityIndex": null,
+        "contextCustomerId": null,
+        "contextProjectId": null,
+        "fromReminder": true
+      },
+      "expected": {
+        "blockedForReminder": false,
+        "suggestionType": "DEFAULT_RANGE",
+        "customerId": null,
+        "projectId": null,
+        "taskId": null,
+        "rangeNotNull": true
+      }
+    },
+    {
+      "description": "Szenario 3: GAP von letztem Ende bis jetzt, gleicher Kunde/Projekt/Task",
+      "setup": {
+        "customers": [
+          { "id": "C", "name": "C", "projects": [ { "id": "P", "name": "P", "tasks": [ { "id": "T", "name": "T" } ] } ] }
+        ],
+        "activities": [
+          { "customerId": "C", "projectId": "P", "taskId": "T", "from": "2025-02-03T09:00", "to": "2025-02-03T09:30" }
+        ]
+      },
+      "input": {
+        "now": "2025-02-03T10:00",
+        "lastActivityIndex": null,
+        "contextCustomerId": null,
+        "contextProjectId": null,
+        "fromReminder": true
+      },
+      "expected": {
+        "blockedForReminder": false,
+        "suggestionType": "GAP",
+        "customerId": "C",
+        "range": ["2025-02-03T09:30", "2025-02-03T10:00"]
+      }
+    },
+    {
+      "description": "Szenario 3: Letzte Aktivität endet genau um 'jetzt' → DEFAULT_RANGE (now−1h, now)",
+      "setup": {
+        "customers": [
+          { "id": "C", "name": "C", "projects": [ { "id": "P", "name": "P", "tasks": [ { "id": "T", "name": "T" } ] } ] }
+        ],
+        "activities": [
+          { "customerId": "C", "projectId": "P", "taskId": "T", "from": "2025-02-03T12:30", "to": "2025-02-03T13:30" }
+        ]
+      },
+      "input": {
+        "now": "2025-02-03T13:30",
+        "lastActivityIndex": null,
+        "contextCustomerId": null,
+        "contextProjectId": null,
+        "fromReminder": false
+      },
+      "expected": {
+        "blockedForReminder": false,
+        "suggestionType": "DEFAULT_RANGE",
+        "range": ["2025-02-03T12:30", "2025-02-03T13:30"]
+      }
+    },
+    {
+      "description": "Szenario 4: Aus Reminder → blockedForReminder, kein Dialog; Range [now, now] für Add Activity",
+      "setup": {
+        "customers": [
+          { "id": "C", "name": "C", "projects": [ { "id": "P", "name": "P", "tasks": [ { "id": "T", "name": "T" } ] } ] }
+        ],
+        "activities": [
+          { "customerId": "C", "projectId": "P", "taskId": "T", "from": "2025-02-03T09:00", "to": "2025-02-03T11:00" }
+        ]
+      },
+      "input": {
+        "now": "2025-02-03T10:00",
+        "lastActivityIndex": null,
+        "contextCustomerId": null,
+        "contextProjectId": null,
+        "fromReminder": true
+      },
+      "expected": {
+        "blockedForReminder": true,
+        "range": ["2025-02-03T10:00", "2025-02-03T10:00"]
+      }
+    },
+    {
+      "description": "Szenario 5: Add Activity, jetzt vor der Aktivität → Lücke (z. B. Tagesanfang bis jetzt)",
+      "setup": {
+        "customers": [
+          { "id": "C", "name": "C", "projects": [ { "id": "P", "name": "P", "tasks": [ { "id": "T", "name": "T" } ] } ] }
+        ],
+        "activities": [
+          { "customerId": "C", "projectId": "P", "taskId": "T", "from": "2025-02-03T10:00", "to": "2025-02-03T11:00" }
+        ]
+      },
+      "input": {
+        "now": "2025-02-03T09:00",
+        "lastActivityIndex": null,
+        "contextCustomerId": null,
+        "contextProjectId": null,
+        "fromReminder": false
+      },
+      "expected": {
+        "blockedForReminder": false,
+        "suggestionType": "GAP",
+        "rangeStartBeforeNow": true,
+        "rangeEndIsNow": true
+      }
+    },
+    {
+      "description": "Szenario 5: Jetzt inside laufender Aktivität → suggestNowOnly (Add Activity mit start=end=now)",
+      "setup": {
+        "customers": [
+          { "id": "C", "name": "C", "projects": [ { "id": "P", "name": "P", "tasks": [ { "id": "T", "name": "T" } ] } ] }
+        ],
+        "activities": [
+          { "customerId": "C", "projectId": "P", "taskId": "T", "from": "2025-02-03T09:00", "to": "2025-02-03T11:00" }
+        ]
+      },
+      "input": {
+        "now": "2025-02-03T10:00",
+        "lastActivityIndex": null,
+        "contextCustomerId": null,
+        "contextProjectId": null,
+        "fromReminder": false
+      },
+      "expected": {
+        "blockedForReminder": true,
+        "rangeStartEqualsEnd": true
+      }
+    },
+    {
+      "description": "Szenario 6: Kontext-Kunde mit Aktivität an anderem Tag → dessen Projekt/Task, GAP oder DEFAULT",
+      "setup": {
+        "customers": [
+          { "id": "C1", "name": "C1", "projects": [ { "id": "P1", "name": "P1", "tasks": [ { "id": "T1", "name": "T1" } ] } ] },
+          { "id": "C2", "name": "C2", "projects": [ { "id": "P2", "name": "P2", "tasks": [ { "id": "T2", "name": "T2" } ] } ] }
+        ],
+        "activities": [
+          { "customerId": "C2", "projectId": "P2", "taskId": "T2", "from": "2025-02-02T14:00", "to": "2025-02-02T15:00" }
+        ]
+      },
+      "input": {
+        "now": "2025-02-03T10:00",
+        "lastActivityIndex": null,
+        "contextCustomerId": "C2",
+        "contextProjectId": null,
+        "fromReminder": false
+      },
+      "expected": {
+        "blockedForReminder": false,
+        "customerId": "C2",
+        "projectId": "P2",
+        "taskId": "T2",
+        "suggestionType": "DEFAULT_RANGE"
+      }
+    },
+    {
+      "description": "Szenario 6: Kontext-Kunde ohne Aktivitäten → erstes Projekt, erste Task",
+      "setup": {
+        "customers": [
+          { "id": "C", "name": "C", "projects": [ { "id": "P", "name": "P", "tasks": [ { "id": "T", "name": "T" } ] } ] }
+        ],
+        "activities": []
+      },
+      "input": {
+        "now": "2025-02-03T10:00",
+        "lastActivityIndex": null,
+        "contextCustomerId": "C",
+        "contextProjectId": null,
+        "fromReminder": false
+      },
+      "expected": {
+        "blockedForReminder": false,
+        "customerId": "C",
+        "projectId": "P",
+        "taskId": "T"
+      }
+    },
+    {
+      "description": "Szenario 7: Keine Aktivität heute → DEFAULT_RANGE (Endzeit wird weitergesetzt)",
+      "setup": {
+        "customers": [
+          { "id": "C", "name": "C", "projects": [ { "id": "P", "name": "P", "tasks": [] } ] }
+        ],
+        "activities": []
+      },
+      "input": {
+        "now": "2025-02-03T10:00",
+        "lastActivityIndex": null,
+        "contextCustomerId": "C",
+        "contextProjectId": null,
+        "fromReminder": true
+      },
+      "expected": {
+        "suggestionType": "DEFAULT_RANGE"
+      }
+    },
+    {
+      "description": "Szenario 7: Lücke von letztem Ende → GAP (Endzeit wird nicht weitergesetzt)",
+      "setup": {
+        "customers": [
+          { "id": "C", "name": "C", "projects": [ { "id": "P", "name": "P", "tasks": [ { "id": "T", "name": "T" } ] } ] }
+        ],
+        "activities": [
+          { "customerId": "C", "projectId": "P", "taskId": "T", "from": "2025-02-03T08:00", "to": "2025-02-03T09:00" }
+        ]
+      },
+      "input": {
+        "now": "2025-02-03T10:00",
+        "lastActivityIndex": null,
+        "contextCustomerId": null,
+        "contextProjectId": null,
+        "fromReminder": true
+      },
+      "expected": {
+        "suggestionType": "GAP"
+      }
+    }
+  ]
+}

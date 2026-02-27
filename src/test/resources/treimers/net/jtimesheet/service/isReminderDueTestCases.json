@@ -1,0 +1,27 @@
+{
+  "_fileDescription": "Testfälle für ReminderService.isReminderDue(now, settings). Prüft, ob zu einem Zeitpunkt ein Reminder ausgelöst werden soll: nur wenn Wochentag im Fenster, Uhrzeit im Fenster (windowStart–windowEnd) und Minute auf einer Intervall-Grenze (:00, :15, :30, :45 bei 15 min).",
+  "_structure": "defaultSettings (windowStart, windowEnd, intervalMinutes, weekdays); cases[]: description, now (ISO), expected (boolean), optional settings (Override pro Fall).",
+  "defaultSettings": {
+    "windowStart": "09:00",
+    "windowEnd": "17:00",
+    "intervalMinutes": 15,
+    "weekdays": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]
+  },
+  "cases": [
+    { "description": "Auf Intervall-Grenze und im Fenster (z. B. Mo 16:15) → due", "now": "2025-02-03T16:15", "expected": true },
+    { "description": "Nicht auf Intervall-Grenze (z. B. 16:05 bei 15-min) → nicht due", "now": "2025-02-03T16:05", "expected": false },
+    { "description": "Vor Fenster-Start → nicht due", "now": "2025-02-03T08:00", "expected": false },
+    { "description": "Nach Fenster-Ende → nicht due", "now": "2025-02-03T18:00", "expected": false },
+    { "description": "Kein Reminder-Wochentag (Samstag) → nicht due", "now": "2025-02-01T10:00", "expected": false },
+    { "description": "Auf Grenze :00 im Fenster → due", "now": "2025-02-03T10:00", "expected": true },
+    { "description": "Auf Grenze :15 im Fenster → due", "now": "2025-02-03T10:15", "expected": true },
+    { "description": "Auf Grenze :30 im Fenster → due", "now": "2025-02-03T10:30", "expected": true },
+    { "description": "Auf Grenze :45 im Fenster → due", "now": "2025-02-03T10:45", "expected": true },
+    {
+      "description": "Sonntag mit eigenem Fenster",
+      "now": "2025-02-02T10:00",
+      "expected": true,
+      "settings": { "windowStart": "08:00", "windowEnd": "12:00", "intervalMinutes": 30, "weekdays": ["SUNDAY"] }
+    }
+  ]
+}
