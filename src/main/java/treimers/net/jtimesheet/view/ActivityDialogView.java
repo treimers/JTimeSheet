@@ -71,7 +71,9 @@ public class ActivityDialogView {
         BiFunction<Customer, Project, LocalDateTime[]> suggestedRangeForSelection,
         Consumer<Window> onOpenManage,
         Window owner,
-        int endTimeRefreshIntervalMinutes
+        int endTimeRefreshIntervalMinutes,
+        Runnable onDialogShown,
+        Runnable onDialogHidden
     ) {
         Dialog<ActivityInput> dialog = new Dialog<>();
         if (owner != null) {
@@ -366,7 +368,11 @@ public class ActivityDialogView {
             );
         });
 
+        Timeline[] endTimeRefreshTimeline = { null };
         dialog.setOnShown(e -> {
+            if (onDialogShown != null) {
+                onDialogShown.run();
+            }
             dialog.getDialogPane().getScene().addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
                 if (ev.getCode() == KeyCode.ESCAPE) {
                     dialog.setResult(null);
@@ -374,35 +380,34 @@ public class ActivityDialogView {
                     ev.consume();
                 }
             });
-        });
-
-        if (endTimeRefreshIntervalMinutes > 0) {
-            Timeline[] endTimeRefreshTimeline = { null };
-            final int intervalMin = endTimeRefreshIntervalMinutes;
-            dialog.setOnShown(event -> {
+            if (endTimeRefreshIntervalMinutes > 0) {
+                final int intervalMin = endTimeRefreshIntervalMinutes;
                 Runnable refresh = () -> refreshEndTimeToNow(
                     datePicker, fromHourChoice, fromMinuteChoice,
                     toHourChoice, toMinuteChoice, durationTextField,
                     updating, timeGridMinutes
                 );
                 long delayMs = delayMillisUntilNextIntervalBoundary(intervalMin);
-                Timeline first = new Timeline(new KeyFrame(javafx.util.Duration.millis(Math.max(1, delayMs)), e -> {
+                Timeline first = new Timeline(new KeyFrame(javafx.util.Duration.millis(Math.max(1, delayMs)), e2 -> {
                     refresh.run();
                     endTimeRefreshTimeline[0] = new Timeline(new KeyFrame(
                         Duration.minutes(intervalMin),
-                        e2 -> refresh.run()
+                        e3 -> refresh.run()
                     ));
                     endTimeRefreshTimeline[0].setCycleCount(Timeline.INDEFINITE);
                     endTimeRefreshTimeline[0].play();
                 }));
                 first.play();
-            });
-            dialog.setOnHidden(event -> {
-                if (endTimeRefreshTimeline[0] != null) {
-                    endTimeRefreshTimeline[0].stop();
-                }
-            });
-        }
+            }
+        });
+        dialog.setOnHidden(event -> {
+            if (endTimeRefreshTimeline[0] != null) {
+                endTimeRefreshTimeline[0].stop();
+            }
+            if (onDialogHidden != null) {
+                onDialogHidden.run();
+            }
+        });
 
         return dialog.showAndWait();
     }

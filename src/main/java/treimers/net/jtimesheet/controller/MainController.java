@@ -162,6 +162,7 @@ public class MainController {
     private LocalDateTime programStartTime;
     /** When reminder showed a gap and user didn't add, re-show same range (don't extend end). Cleared when user adds. */
     private LocalDateTime[] lastShownGapRange;
+    private boolean activityDialogOpen;
     private final Preferences preferences = Preferences.userRoot().node("net/treimers/jtimesheet");
     private final SettingsService settingsService;
     private final StorageService storageService;
@@ -2396,6 +2397,9 @@ public class MainController {
      * Accepts {@code now} for testability. No reminder on startup (rule 1); only show on interval boundary within window (rule 2).
      */
     void onReminderFired(LocalDateTime now) {
+        if (activityDialogOpen) {
+            return;
+        }
         if (!reminderService.isReminderDue(now, settings)) {
             return;
         }
@@ -3400,7 +3404,9 @@ public class MainController {
             suggestedRangeForSelection,
             this::openManagementDialog,
             primaryStage,
-            endTimeRefreshIntervalMinutes
+            endTimeRefreshIntervalMinutes,
+            () -> activityDialogOpen = true,
+            () -> activityDialogOpen = false
         );
     }
 
