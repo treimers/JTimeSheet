@@ -649,7 +649,7 @@ public class ManagementDialog {
         if (activityCount > 0) {
             message += " " + i18n("management.delete.activities", activityCount);
         }
-        if (confirmDelete(i18n("management.customer.delete.title"), message)) {
+        if (confirmDelete(i18n("management.customer.delete.title"), message, activityCount > 0)) {
             activityCallbacks.removeActivitiesForCustomer(customer.getId());
             customers.remove(customer);
             rebuildTree();
@@ -705,7 +705,7 @@ public class ManagementDialog {
         if (activityCount > 0) {
             message += " " + i18n("management.delete.activities", activityCount);
         }
-        if (confirmDelete(i18n("management.project.delete.title"), message)) {
+        if (confirmDelete(i18n("management.project.delete.title"), message, activityCount > 0)) {
             activityCallbacks.removeActivitiesForProject(selected.customer.getId(), selected.project.getId());
             selected.customer.getProjects().remove(selected.project);
             rebuildTree();
@@ -762,7 +762,7 @@ public class ManagementDialog {
         if (activityCount > 0) {
             message += " " + i18n("management.delete.activities", activityCount);
         }
-        if (confirmDelete(i18n("management.task.delete.title"), message)) {
+        if (confirmDelete(i18n("management.task.delete.title"), message, activityCount > 0)) {
             activityCallbacks.removeActivitiesForTask(selected.customer.getId(), selected.project.getId(), selected.task.getId());
             selected.project.getTasks().remove(selected.task);
             rebuildTree();
@@ -864,8 +864,9 @@ public class ManagementDialog {
         return dialog.showAndWait().map(String::trim).filter(value -> !value.isEmpty());
     }
 
-    private boolean confirmDelete(String title, String content) {
-        ButtonType delete = new ButtonType(i18n("button.delete"), ButtonData.OK_DONE);
+    private boolean confirmDelete(String title, String content, boolean withActivities) {
+        String deleteLabel = withActivities ? i18n("management.delete.including.activities") : i18n("button.delete");
+        ButtonType delete = new ButtonType(deleteLabel, ButtonData.OK_DONE);
         ButtonType cancel = new ButtonType(i18n("button.cancel"), ButtonData.CANCEL_CLOSE);
         Alert alert = new Alert(AlertType.CONFIRMATION, content, delete, cancel);
         alert.setTitle(title);

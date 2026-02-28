@@ -3668,12 +3668,14 @@ public class MainController {
     private void removeActivitiesForCustomer(String customerId) {
         activities.removeIf(activity -> customerId.equals(activity.getCustomerId()));
         refreshAllActivityTables();
+        syncAllCalendarsFromActivities();
     }
 
     private void removeActivitiesForProject(String customerId, String projectId) {
         activities.removeIf(activity -> customerId.equals(activity.getCustomerId())
             && projectId.equals(activity.getProjectId()));
         refreshAllActivityTables();
+        syncAllCalendarsFromActivities();
     }
 
     private void removeActivitiesForTask(String customerId, String projectId, String taskId) {
@@ -3681,6 +3683,7 @@ public class MainController {
             && projectId.equals(activity.getProjectId())
             && taskId.equals(activity.getTaskId()));
         refreshAllActivityTables();
+        syncAllCalendarsFromActivities();
     }
 
     private void loadData() {
