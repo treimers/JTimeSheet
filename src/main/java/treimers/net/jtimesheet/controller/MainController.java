@@ -107,6 +107,7 @@ import treimers.net.jtimesheet.model.Activity;
 import treimers.net.jtimesheet.view.TooltipDayEntryView;
 import treimers.net.jtimesheet.view.TooltipMonthEntryView;
 import treimers.net.jtimesheet.model.AppSettings;
+import treimers.net.jtimesheet.model.CalendarColorPalette;
 import treimers.net.jtimesheet.model.Customer;
 import treimers.net.jtimesheet.model.Language;
 import treimers.net.jtimesheet.model.Project;
@@ -233,6 +234,8 @@ public class MainController {
     private Tab calendarTab;
     private boolean calendarContentCreated;
     private static final int CALENDAR_TAB_INDEX = 1;
+    /** URL of the user calendar color override stylesheet, or null if none. */
+    private String calendarOverrideStylesheetUrl;
     private CalendarSource calendarSource;
     private Map<String, Calendar<Activity>> calendarsByCustomerProject = new HashMap<>();
     private final List<Entry<Activity>> calendarEntries = new ArrayList<>();
@@ -866,7 +869,7 @@ public class MainController {
         return calendarView;
     }
 
-    /** One CalendarFX calendar per (customer, project); styles assigned by (customer|project) for stable colors. */
+    /** One CalendarFX calendar per (customer, project); styles and colors from customer calendar color. */
     private void syncAllCalendarsFromActivities() {
         if (calendarSource == null || calendarsByCustomerProject == null) {
             return;
@@ -886,7 +889,6 @@ public class MainController {
             String slotKey = activity.getCustomerId() + "|" + activity.getProjectId() + "|" + from + "|" + to;
             slotGroupsByKey.computeIfAbsent(slotKey, k -> new ArrayList<>()).add(activity);
         }
-        // Distinct (customer|project) keys in stable order, so same key always gets same style even when sync runs multiple times.
         Set<String> cpKeySet = new HashSet<>();
         for (Map.Entry<String, List<Activity>> e : slotGroupsByKey.entrySet()) {
             Activity first = e.getValue().get(0);
@@ -895,8 +897,25 @@ public class MainController {
         List<String> distinctCpKeys = new ArrayList<>(cpKeySet);
         Collections.sort(distinctCpKeys);
         Map<String, Calendar.Style> styleByCpKey = new HashMap<>();
+        Map<String, Integer> styleIndexByCpKey = new HashMap<>();
+        List<String> hexColorsForOverride = new ArrayList<>(7);
         for (int i = 0; i < distinctCpKeys.size(); i++) {
-            styleByCpKey.put(distinctCpKeys.get(i), styles[i % styles.length]);
+            String cpKey = distinctCpKeys.get(i);
+            styleByCpKey.put(cpKey, styles[i % styles.length]);
+            styleIndexByCpKey.put(cpKey, i % 7);
+            if (i < 7) {
+                String customerId = cpKey.substring(0, cpKey.indexOf('|'));
+                Customer customer = findCustomerById(customerId);
+                String hex = customer != null ? customer.getCalendarColorHex() : CalendarColorPalette.DEFAULT.getHexColor(i);
+                hexColorsForOverride.add(hex);
+            }
+        }
+        for (int i = hexColorsForOverride.size(); i < 7; i++) {
+            hexColorsForOverride.add(CalendarColorPalette.DEFAULT.getHexColor(i));
+        }
+        Scene scene = primaryStage != null ? primaryStage.getScene() : null;
+        if (scene != null) {
+            applyCalendarColorPalette(scene, hexColorsForOverride);
         }
         List<Map.Entry<String, List<Activity>>> slotOrder = new ArrayList<>(slotGroupsByKey.entrySet());
         slotOrder.sort(Comparator.comparing(e -> e.getValue().get(0).getCustomerId() + "|" + e.getValue().get(0).getProjectId()));
@@ -922,6 +941,8 @@ public class MainController {
             Entry<Activity> entry = new Entry<>(title);
             entry.setInterval(new Interval(from, to, zone));
             entry.setUserObject(first);
+            int styleIdx = styleIndexByCpKey.getOrDefault(cpKey, 0);
+            entry.getStyleClass().add("jtimesheet-entry-color-" + styleIdx);
             cal.addEntry(entry);
             calendarEntries.add(entry);
         }
@@ -981,6 +1002,49 @@ public class MainController {
     private void tryRestoreCalendarVisibilityPreference() {
         String saved = preferences.get(PREF_CALENDAR_VISIBLE, "");
         if (saved.isEmpty()) return;
+    }
+
+    /**
+     * Applies calendar entry colors via a stylesheet override.
+     * We add a custom style class to each Entry (jtimesheet-entry-color-0 … 6); the EntryViewBase
+     * copies the entry's style classes to the view node. We then inject CSS that sets background,
+     * border, and label text color for each class so our customer colors are applied regardless of
+     * CalendarFX's variable-based styling.
+     * @param hexColors list of 7 hex colors (style 1–7), or empty to remove override
+     */
+    private void applyCalendarColorPalette(Scene scene, List<String> hexColors) {
+        if (scene == null) {
+            return;
+        }
+        var stylesheets = scene.getStylesheets();
+        if (calendarOverrideStylesheetUrl != null) {
+            stylesheets.remove(calendarOverrideStylesheetUrl);
+            calendarOverrideStylesheetUrl = null;
+        }
+        if (hexColors == null || hexColors.size() < 7) {
+            return;
+        }
+        StringBuilder css = new StringBuilder();
+        for (int i = 0; i < 7; i++) {
+            String hex = hexColors.get(i);
+            String cls = "jtimesheet-entry-color-" + i;
+            css.append(".").append(cls).append(" {\n");
+            css.append("  -fx-background-color: ").append(hex).append(" !important;\n");
+            css.append("  -fx-border-color: derive(").append(hex).append(", -25%) !important;\n");
+            css.append("}\n");
+            css.append(".").append(cls).append(" .start-time-label, .").append(cls).append(" .title-label {\n");
+            css.append("  -fx-text-fill: derive(").append(hex).append(", -45%) !important;\n");
+            css.append("}\n");
+        }
+        try {
+            Path tmp = Files.createTempFile("jtimesheet-calendar-colors-", ".css");
+            Files.writeString(tmp, css.toString());
+            String url = tmp.toUri().toASCIIString();
+            stylesheets.add(url);
+            calendarOverrideStylesheetUrl = url;
+        } catch (IOException ignored) {
+            // Keep previous or default colors
+        }
     }
 
     private String buildGroupedActivityTitleForCalendar(Activity representative, int count) {
@@ -3635,6 +3699,10 @@ public class MainController {
                         customerData.timesheetSheetNo,
                         customerData.timesheetTaskSeparator
                     );
+                    customer.setCalendarColorPalette(CalendarColorPalette.fromName(customerData.calendarColorPalette));
+                    if (customerData.calendarColorIndex != null && customerData.calendarColorIndex >= 0 && customerData.calendarColorIndex <= 6) {
+                        customer.setCalendarColorIndex(customerData.calendarColorIndex);
+                    }
                     if (customerData.projects != null) {
                         for (ProjectData projectData : customerData.projects) {
                             String projectId = projectData.id != null ? projectData.id : UUID.randomUUID().toString();
@@ -3691,6 +3759,8 @@ public class MainController {
             customerData.timesheetFilenameSuggestion = customer.getTimesheetFilenameSuggestion();
             customerData.timesheetSheetNo = customer.getTimesheetSheetNo();
             customerData.timesheetTaskSeparator = customer.getTimesheetTaskSeparator();
+            customerData.calendarColorPalette = customer.getCalendarColorPalette().name();
+            customerData.calendarColorIndex = customer.getCalendarColorIndex();
             customerData.projects = new ArrayList<>();
             for (Project project : customer.getProjects()) {
                 ProjectData projectData = new ProjectData();

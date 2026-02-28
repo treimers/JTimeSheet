@@ -3,10 +3,12 @@ package treimers.net.jtimesheet.ui;
 import java.io.File;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.MissingResourceException;
 import java.util.Optional;
 import java.util.ResourceBundle;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
@@ -20,6 +22,7 @@ import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar.ButtonData;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
@@ -39,6 +42,7 @@ import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.input.KeyCode;
@@ -48,6 +52,7 @@ import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.Window;
+import treimers.net.jtimesheet.model.CalendarColorPalette;
 import treimers.net.jtimesheet.model.Customer;
 import treimers.net.jtimesheet.model.Project;
 import treimers.net.jtimesheet.model.Task;
@@ -73,6 +78,8 @@ public class ManagementDialog {
     private TextField timesheetSheetNoField;
     private TextField timesheetTaskSeparatorField;
     private Button templateBrowseButton;
+    private ComboBox<CalendarColorPalette> calendarColorPaletteChoice;
+    private StackPane[] calendarColorBoxes = new StackPane[7];
     private Customer detailsCustomer;
     private boolean updatingDetails;
     private boolean saveConfirmed;
@@ -304,6 +311,45 @@ public class ManagementDialog {
         grid.add(timesheetSheetNoField, 1, 6);
         grid.add(new Label(i18n("management.customer.field.taskSeparator")), 0, 7);
         grid.add(timesheetTaskSeparatorField, 1, 7);
+        grid.add(new Label(i18n("management.customer.field.calendarColor")), 0, 8);
+        calendarColorPaletteChoice = new ComboBox<>(FXCollections.observableArrayList(CalendarColorPalette.values()));
+        calendarColorPaletteChoice.setConverter(new javafx.util.StringConverter<>() {
+            @Override
+            public String toString(CalendarColorPalette p) {
+                if (p == null) return "";
+                return i18n("management.customer.calendarColor.palette." + p.name().toLowerCase(Locale.ROOT));
+            }
+            @Override
+            public CalendarColorPalette fromString(String s) { return null; }
+        });
+        HBox colorBoxesRow = new HBox(4);
+        for (int i = 0; i < 7; i++) {
+            final int index = i;
+            StackPane box = new StackPane();
+            box.setPrefSize(24, 24);
+            box.setMinSize(24, 24);
+            box.getStyleClass().add("calendar-color-box");
+            box.setOnMouseClicked(e -> {
+                if (detailsCustomer != null && !updatingDetails) {
+                    detailsCustomer.setCalendarColorPalette(calendarColorPaletteChoice.getValue() != null ? calendarColorPaletteChoice.getValue() : CalendarColorPalette.DEFAULT);
+                    detailsCustomer.setCalendarColorIndex(index);
+                    refreshCalendarColorSelection();
+                }
+            });
+            calendarColorBoxes[i] = box;
+            colorBoxesRow.getChildren().add(box);
+        }
+        calendarColorPaletteChoice.getSelectionModel().selectedItemProperty().addListener((o, oldVal, newVal) -> {
+            refreshCalendarColorBoxes();
+            if (detailsCustomer != null && !updatingDetails && newVal != null) {
+                detailsCustomer.setCalendarColorPalette(newVal);
+                refreshCalendarColorSelection();
+            }
+        });
+        VBox colorSelector = new VBox(6, calendarColorPaletteChoice, colorBoxesRow);
+        grid.add(colorSelector, 1, 8);
+        calendarColorPaletteChoice.getSelectionModel().select(CalendarColorPalette.DEFAULT);
+        refreshCalendarColorBoxes();
         GridPane.setHgrow(customerNameField, Priority.ALWAYS);
         GridPane.setHgrow(customerAddressArea, Priority.ALWAYS);
         GridPane.setHgrow(templatePathField, Priority.ALWAYS);
@@ -351,9 +397,31 @@ public class ManagementDialog {
             timesheetNameField.setText(safeText(customer.getTimesheetFilenameSuggestion()));
             timesheetSheetNoField.setText(safeText(customer.getTimesheetSheetNo()));
             timesheetTaskSeparatorField.setText(safeText(customer.getTimesheetTaskSeparator()));
+            calendarColorPaletteChoice.getSelectionModel().select(customer.getCalendarColorPalette());
+            refreshCalendarColorBoxes();
+            refreshCalendarColorSelection();
             setDetailsDisabled(false);
         }
         updatingDetails = false;
+    }
+
+    private void refreshCalendarColorBoxes() {
+        CalendarColorPalette palette = calendarColorPaletteChoice.getValue();
+        if (palette == null) palette = CalendarColorPalette.DEFAULT;
+        for (int i = 0; i < 7; i++) {
+            String hex = palette.getHexColor(i);
+            calendarColorBoxes[i].setStyle("-fx-background-color: " + hex + "; -fx-border-color: derive(" + hex + ", -30%); -fx-border-width: 1;");
+        }
+    }
+
+    private void refreshCalendarColorSelection() {
+        CalendarColorPalette p = calendarColorPaletteChoice.getValue() != null ? calendarColorPaletteChoice.getValue() : CalendarColorPalette.DEFAULT;
+        int selectedIdx = detailsCustomer != null ? detailsCustomer.getCalendarColorIndex() : -1;
+        for (int i = 0; i < 7; i++) {
+            String hex = p.getHexColor(i);
+            String border = (i == selectedIdx) ? " -fx-border-width: 3; -fx-border-color: #333;" : " -fx-border-width: 1; -fx-border-color: derive(" + hex + ", -30%);";
+            calendarColorBoxes[i].setStyle("-fx-background-color: " + hex + ";" + border);
+        }
     }
 
     private String safeText(String value) {
@@ -368,6 +436,10 @@ public class ManagementDialog {
         timesheetSheetNoField.setDisable(disabled);
         timesheetTaskSeparatorField.setDisable(disabled);
         templateBrowseButton.setDisable(disabled);
+        calendarColorPaletteChoice.setDisable(disabled);
+        for (StackPane box : calendarColorBoxes) {
+            box.setDisable(disabled);
+        }
     }
 
     private void commitCustomerName() {
@@ -523,11 +595,28 @@ public class ManagementDialog {
         Optional<String> name = promptForText(i18n("management.customer.new.title"), i18n("management.customer.new.label"));
         name.ifPresent(value -> {
             Customer customer = new Customer(value);
+            int suggestedIndex = getSuggestedCalendarColorIndex();
+            customer.setCalendarColorPalette(CalendarColorPalette.DEFAULT);
+            customer.setCalendarColorIndex(suggestedIndex);
             customers.add(customer);
             sortCustomers();
             rebuildTree();
             selectCustomer(customer);
         });
+    }
+
+    /** First color index (0–6) from DEFAULT palette not yet used by any customer. */
+    private int getSuggestedCalendarColorIndex() {
+        Set<String> used = new HashSet<>();
+        for (Customer c : customers) {
+            used.add(c.getCalendarColorPalette().name() + ":" + c.getCalendarColorIndex());
+        }
+        for (int i = 0; i < 7; i++) {
+            if (!used.contains(CalendarColorPalette.DEFAULT.name() + ":" + i)) {
+                return i;
+            }
+        }
+        return 0;
     }
 
     private void renameCustomer() {

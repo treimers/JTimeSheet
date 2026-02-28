@@ -2,7 +2,7 @@
 
 Die folgenden Regeln sollen im Programm (in separaten Klassen) implementiert werden. Weiterhin sollen die Testfälle entsprechend überarbeitet werden.
 
-# Reminder
+## Reminder
 
 Der Reminder-Dialog erscheint nur unter bestimmten Bedingungen und es gibt Ausnahmen, die beachtet werden müssen.
 
@@ -46,11 +46,11 @@ Es gibt keinen Reminder-Dialog, wenn die folgenden Bedingungen erfüllt sind.
 | 2 | Es gibt einen Eintrag, dessen Ende jetzt ist oder in der Zukunft liegt | `ReminderExceptionRulesTest.hasActivityEndingNowOrInFuture`, `shouldSuppressReminder` |
 | 3 | Es gibt keine Kunde/Projekt/Task | `ReminderExceptionRulesTest.hasNoCustomerProjectTask`, `shouldSuppressReminder` |
 
-# Add-Activity-Dialog
+## Add-Activity-Dialog
 
 Der Add-Activity-Dialog soll in der Regel immer erscheinen, so dass der Benutzer jederzeit neue Zeiten erfassen kann.
 
-# Add-Activity-Ausnahmen
+### Add-Activity-Ausnahmen
 
 Es gibt keinen Add-Activity-Dialog, wenn die folgenden Bedingungen erfüllt sind.
 
@@ -62,7 +62,7 @@ Es gibt keinen Add-Activity-Dialog, wenn die folgenden Bedingungen erfüllt sind
 
 In diesen Fällen muss ein Hinweis-Dialog erscheinen.
 
-## Zeitvorschläge
+### Zeitvorschläge
 
 Im Zeiterfassungdialog (Reminder oder Add Activity) sollen Vorschläge für Kunde, Projekt, Task, Start, Ende und Länge erscheinen. **Start** ist bei den Szenarien 1 und 2 (keine vergangene Aktivität / keine Aktivität heute) der **Programmstart**, gerundet auf das konfigurierte Zeitraster; **Ende** ist jeweils **jetzt**. Diese Vorschläge sollen folgenden Regeln folgen.
 
@@ -76,3 +76,7 @@ Im Zeiterfassungdialog (Reminder oder Add Activity) sollen Vorschläge für Kund
 | 4 (Task) | Wechsel in Activity-Dialog | Kunde unverändert | Projekt unverändert | anderes Task des Projekts | Ende der letzten Aktivität | jetzt | Differenz | `reminderSuggestionLogicTestCases.json`: „Zeitvorschlag Regel 4 (Task): Kunde und Projekt unverändert…“ |
 
 Es ist wichtig, dass bei Wechsel des Kunden oder des Projekts entweder die letzte Aktivität genommen wird oder, wenn es keine gibt, immer der erste Eintrag. (Test: Szenario 6 – Kontext-Kunde mit/ohne Aktivitäten.)
+
+## Reminder-Dialog und Add-Activity-Dialog
+
+Wenn der Reminder oder Add-Activity-Dialog länger als das Zeitraster geöffnet stehenbleiben, soll die Ende-Zeit bei jedem Zeitpunkt im Reminder-Intervall automatisch weitergesetzt werden, aber nie über das Tagesende hinaus.

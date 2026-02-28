@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.UUID;
 
 public class Customer {
+    private static final int DEFAULT_CALENDAR_COLOR_INDEX = 0;
+
     private final String id;
     private String name;
     private String address;
@@ -12,6 +14,8 @@ public class Customer {
     private String timesheetFilenameSuggestion;
     private String timesheetSheetNo;
     private String timesheetTaskSeparator;
+    private CalendarColorPalette calendarColorPalette = CalendarColorPalette.DEFAULT;
+    private int calendarColorIndex = DEFAULT_CALENDAR_COLOR_INDEX;
     private final List<Project> projects = new ArrayList<>();
 
     public Customer(String name) {
@@ -90,6 +94,29 @@ public class Customer {
 
     public void setTimesheetTaskSeparator(String value) {
         this.timesheetTaskSeparator = value != null ? value : "";
+    }
+
+    public CalendarColorPalette getCalendarColorPalette() {
+        return calendarColorPalette != null ? calendarColorPalette : CalendarColorPalette.DEFAULT;
+    }
+
+    public void setCalendarColorPalette(CalendarColorPalette value) {
+        this.calendarColorPalette = value != null ? value : CalendarColorPalette.DEFAULT;
+    }
+
+    /** Index 0–6 for the palette color. */
+    public int getCalendarColorIndex() {
+        int i = calendarColorIndex;
+        return i < 0 || i > 6 ? DEFAULT_CALENDAR_COLOR_INDEX : i;
+    }
+
+    public void setCalendarColorIndex(int value) {
+        this.calendarColorIndex = value < 0 ? 0 : Math.min(value, 6);
+    }
+
+    /** Hex color for this customer's calendar (from palette + index). */
+    public String getCalendarColorHex() {
+        return getCalendarColorPalette().getHexColor(getCalendarColorIndex());
     }
 
     public List<Project> getProjects() {
