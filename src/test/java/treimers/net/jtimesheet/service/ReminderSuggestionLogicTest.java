@@ -112,9 +112,11 @@ class ReminderSuggestionLogicTest {
             String contextProjectId = input.has("contextProjectId") && !input.get("contextProjectId").isNull()
                 ? input.get("contextProjectId").asText() : null;
             boolean fromReminder = input.get("fromReminder").asBoolean();
+            LocalDateTime programStart = input.has("programStart") && !input.get("programStart").isNull()
+                ? LocalDateTime.parse(input.get("programStart").asText()) : null;
             JsonNode expected = c.get("expected");
             builder.add(Arguments.of(description, now, customers, activities, lastActivity,
-                contextCustomerId, contextProjectId, defaultSettings, fromReminder, expected));
+                contextCustomerId, contextProjectId, defaultSettings, fromReminder, programStart, expected));
         }
         return builder.build();
     }
@@ -233,9 +235,10 @@ class ReminderSuggestionLogicTest {
             String contextProjectId,
             AppSettings settings,
             boolean fromReminder,
+            LocalDateTime programStart,
             JsonNode expected) {
         ReminderSuggestion s = logic.compute(now, activities, customers, lastActivity,
-            contextCustomerId, contextProjectId, settings, fromReminder);
+            contextCustomerId, contextProjectId, settings, fromReminder, programStart);
 
         if (expected.has("blockedForReminder")) {
             assertEquals(expected.get("blockedForReminder").asBoolean(), s.isBlockedForReminder(), description + " (blockedForReminder)");
@@ -328,7 +331,7 @@ class ReminderSuggestionLogicTest {
         void resolveCustomer() {
             Customer c = addCustomer("X");
             ReminderSuggestion s = ReminderSuggestion.suggest(
-                    NOW_MONDAY_10.minusHours(1), NOW_MONDAY_10,
+                    NOW_MONDAY_10, NOW_MONDAY_10,
                     c.getId(), null, null, ReminderSuggestion.SuggestionType.DEFAULT_RANGE);
             assertEquals(c, s.resolveCustomer(customers));
         }
@@ -340,7 +343,7 @@ class ReminderSuggestionLogicTest {
             Project p = addProject(c, "P");
             Task t = addTask(p, "T");
             ReminderSuggestion s = ReminderSuggestion.suggest(
-                    NOW_MONDAY_10.minusHours(1), NOW_MONDAY_10,
+                    NOW_MONDAY_10, NOW_MONDAY_10,
                     c.getId(), p.getId(), t.getId(), ReminderSuggestion.SuggestionType.DEFAULT_RANGE);
             assertEquals(p, s.resolveProject(c));
             assertEquals(t, s.resolveTask(p));

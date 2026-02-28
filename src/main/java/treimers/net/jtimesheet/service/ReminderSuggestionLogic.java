@@ -28,6 +28,7 @@ public final class ReminderSuggestionLogic {
      * @param contextProjectId project selected in dialog, or null to use default
      * @param settings app settings (time grid)
      * @param fromReminder true when called from reminder (no reminder if last end in future); false for Add Activity (suggest last gap)
+     * @param programStartTime program start time (rounded to time grid for default range start); null = use now as start
      * @return suggestion (blocked or range + defaults)
      */
     public ReminderSuggestion compute(
@@ -38,19 +39,21 @@ public final class ReminderSuggestionLogic {
             String contextCustomerId,
             String contextProjectId,
             AppSettings settings,
-            boolean fromReminder) {
+            boolean fromReminder,
+            LocalDateTime programStartTime) {
         int timeGridMinutes = AppSettings.normalizeTimeGridMinutes(settings.getTimeGridMinutes());
         LocalDateTime nowOnGrid = alignToTimeGrid(now, timeGridMinutes);
+        LocalDateTime defaultStart = defaultStartForSuggestion(nowOnGrid, programStartTime, timeGridMinutes);
         LocalDate today = now.toLocalDate();
 
         String customerId = contextCustomerId != null ? contextCustomerId : getDefaultCustomerId(customers, lastActivity);
         Customer customer = findCustomer(customers, customerId);
         if (customer == null) {
-            // No customer: suggest first customer, first project, first task, default range
+            // Rules.md Szenario 1: Keine vergangenen Aktivitäten → Start=Programmstart (gerundet), Ende=jetzt
             Customer first = customers != null && !customers.isEmpty() ? customers.get(0) : null;
             if (first == null) {
                 return ReminderSuggestion.suggest(
-                        nowOnGrid.minusHours(1),
+                        defaultStart,
                         nowOnGrid,
                         null,
                         null,
@@ -62,7 +65,7 @@ public final class ReminderSuggestionLogic {
                     ? null
                     : firstProject.getTasks().get(0);
             return ReminderSuggestion.suggest(
-                    nowOnGrid.minusHours(1),
+                    defaultStart,
                     nowOnGrid,
                     first.getId(),
                     firstProject != null ? firstProject.getId() : null,
@@ -124,12 +127,12 @@ public final class ReminderSuggestionLogic {
             lastEndBeforeNow = null;
         }
 
-        // No last end in the future → use last end (lastEndBeforeNow) as start of suggestion; no gap search
+        // No last end in the future → use last end (lastEndBeforeNow) as start, or Programmstart bis jetzt (Rules.md Szenario 2)
         LocalDateTime fromAligned = lastEndBeforeNow != null
                 ? alignToTimeGrid(lastEndBeforeNow, timeGridMinutes)
                 : null;
         boolean gapNonEmpty = fromAligned != null && fromAligned.isBefore(nowOnGrid);
-        LocalDateTime from = gapNonEmpty ? fromAligned : nowOnGrid.minusHours(1);
+        LocalDateTime from = gapNonEmpty ? fromAligned : defaultStart;
         LocalDateTime to = nowOnGrid;
         LocalDateTime[] range = capEndTimeToNow(from, to, nowOnGrid);
 
@@ -143,13 +146,22 @@ public final class ReminderSuggestionLogic {
         return ReminderSuggestion.suggest(range[0], range[1], customerId, defaultProjectId, defaultTaskId, type);
     }
 
-    /** True if current time is within reminder window (today's start–end and a reminder weekday). */
-    public boolean isNowWithinReminderWindow(LocalDateTime now, AppSettings settings) {
-        if (!settings.getReminderWeekdays().contains(now.getDayOfWeek())) {
-            return false;
+    /**
+     * Start time for the default suggestion range when there is no gap: program start (rounded to grid) or now if no program start given.
+     * Result is never after nowOnGrid.
+     */
+    private static LocalDateTime defaultStartForSuggestion(
+            LocalDateTime nowOnGrid, LocalDateTime programStartTime, int timeGridMinutes) {
+        if (programStartTime == null) {
+            return nowOnGrid;
         }
-        return !now.toLocalTime().isBefore(settings.getReminderStartTime())
-                && !now.toLocalTime().isAfter(settings.getReminderEndTime());
+        LocalDateTime start = alignToTimeGrid(programStartTime, timeGridMinutes);
+        return start.isAfter(nowOnGrid) ? nowOnGrid : start;
+    }
+
+    /** True if current time is within reminder window (weekday and time between start–end). Delegates to {@link ReminderWindowRules}. */
+    public boolean isNowWithinReminderWindow(LocalDateTime now, AppSettings settings) {
+        return ReminderWindowRules.isWithinWindow(now, settings);
     }
 
     private static String getDefaultCustomerId(List<Customer> customers, Activity lastActivity) {

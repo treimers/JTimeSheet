@@ -110,6 +110,8 @@ import treimers.net.jtimesheet.model.Project;
 import treimers.net.jtimesheet.model.Task;
 import treimers.net.jtimesheet.model.ViewLevel;
 import treimers.net.jtimesheet.model.ViewTabState;
+import treimers.net.jtimesheet.service.AddActivityDialogRules;
+import treimers.net.jtimesheet.service.ReminderExceptionRules;
 import treimers.net.jtimesheet.service.ReminderService;
 import treimers.net.jtimesheet.service.ReminderSuggestion;
 import treimers.net.jtimesheet.service.ReminderSuggestionLogic;
@@ -152,6 +154,8 @@ public class MainController {
     private Activity lastActivity;
     private final ReminderService reminderService = new ReminderService();
     private final ReminderSuggestionLogic reminderSuggestionLogic = new ReminderSuggestionLogic();
+    /** When the application was started (for Zeitvorschläge: Start = Programmstart gerundet auf Zeitraster). */
+    private LocalDateTime programStartTime;
     /** When reminder showed a gap and user didn't add, re-show same range (don't extend end). Cleared when user adds. */
     private LocalDateTime[] lastShownGapRange;
     private final Preferences preferences = Preferences.userRoot().node("net/treimers/jtimesheet");
@@ -254,6 +258,7 @@ public class MainController {
     public void start(Stage stage, HostServices hostServices) {
         this.primaryStage = stage;
         this.hostServices = hostServices;
+        this.programStartTime = LocalDateTime.now();
         settingsService.loadIfPresent(settings);
         loadBundle(settings.getLanguage());
         checkBundleCompleteness();
@@ -2299,6 +2304,9 @@ public class MainController {
         if (!reminderService.isReminderDue(now, settings)) {
             return;
         }
+        if (ReminderExceptionRules.shouldSuppressReminder(activities, customers, now)) {
+            return;
+        }
         ReminderSuggestion s = reminderSuggestionLogic.compute(
                 now,
                 new ArrayList<>(activities),
@@ -2307,7 +2315,8 @@ public class MainController {
                 null,
                 null,
                 settings,
-                true);
+                true,
+                programStartTime);
         if (s.isBlockedForReminder()) {
             return;
         }
@@ -2369,6 +2378,13 @@ public class MainController {
      * when blocked, shows info message. When from reminder, use {@link #onReminderFired} instead.
      */
     private void openAddOrPromptActivityDialog(String title, LocalDateTime now, boolean fromReminder) {
+        if (!fromReminder) {
+            AddActivityDialogRules.BlockedReason blocked = AddActivityDialogRules.getBlockedReason(customers);
+            if (blocked != AddActivityDialogRules.BlockedReason.NONE) {
+                showInfo(i18n(blocked.getMessageKey()));
+                return;
+            }
+        }
         ReminderSuggestion s = reminderSuggestionLogic.compute(
                 now,
                 new ArrayList<>(activities),
@@ -2377,7 +2393,8 @@ public class MainController {
                 null,
                 null,
                 settings,
-                fromReminder);
+                fromReminder,
+                programStartTime);
         if (s.isBlockedForReminder()) {
             if (fromReminder) {
                 return;
@@ -2388,22 +2405,23 @@ public class MainController {
         openAddOrPromptActivityDialogWithSuggestion(title, now, s, range);
     }
 
-    /** Callback for Add dialog: returns suggested [from, to] when user changes customer or project (rule 8). If blocked, returns last hour so the dialog has a valid range. */
+    /** Callback for Add dialog: returns suggested [from, to] when user changes customer or project (rule 8). If no range, returns Programmstart–jetzt (gerundet). */
     private LocalDateTime[] suggestedPromptRangeForSelection(Customer customer, Project project) {
+        LocalDateTime now = LocalDateTime.now();
         ReminderSuggestion s = reminderSuggestionLogic.compute(
-                LocalDateTime.now(),
+                now,
                 new ArrayList<>(activities),
                 new ArrayList<>(customers),
                 lastActivity,
                 customer != null ? customer.getId() : null,
                 project != null ? project.getId() : null,
                 settings,
-                false);
+                false,
+                programStartTime);
         if (s.getRange() != null) {
             return s.getRange();
         }
-        LocalDateTime now = LocalDateTime.now();
-        return new LocalDateTime[] { now.minusHours(1), now };
+        return new LocalDateTime[] { now, now };
     }
 
     private void importCsv() {

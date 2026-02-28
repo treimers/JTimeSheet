@@ -59,7 +59,7 @@
       }
     },
     {
-      "description": "Szenario 1: Letzter Kunde und DEFAULT_RANGE (now−1h, now)",
+      "description": "Szenario 1: Keine Aktivität heute → letzter Kunde, Start=Programmstart (gerundet), Ende=jetzt (Rules.md Szenario 2)",
       "setup": {
         "customers": [
           { "id": "A", "name": "A", "projects": [] },
@@ -71,6 +71,7 @@
       },
       "input": {
         "now": "2025-02-03T10:00",
+        "programStart": "2025-02-03T09:00",
         "lastActivityIndex": 0,
         "contextCustomerId": null,
         "contextProjectId": null,
@@ -86,7 +87,7 @@
       }
     },
     {
-      "description": "Szenario 2: Erster Kunde, erstes Projekt, erste Task, DEFAULT_RANGE",
+      "description": "Szenario 2: Erster Kunde, erstes Projekt, erste Task, Start=Programmstart (gerundet), Ende=jetzt (Rules.md Szenario 1)",
       "setup": {
         "customers": [
           { "id": "Only", "name": "Only", "projects": [ { "id": "P", "name": "P", "tasks": [ { "id": "T", "name": "T" } ] } ] }
@@ -95,6 +96,7 @@
       },
       "input": {
         "now": "2025-02-03T10:00",
+        "programStart": "2025-02-03T09:00",
         "lastActivityIndex": null,
         "contextCustomerId": null,
         "contextProjectId": null,
@@ -110,13 +112,14 @@
       }
     },
     {
-      "description": "Szenario 2: Keine Kunden → null-IDs, DEFAULT_RANGE",
+      "description": "Szenario 2: Keine Kunden → null-IDs, Start=Programmstart (gerundet), Ende=jetzt (Rules.md Szenario 1)",
       "setup": {
         "customers": [],
         "activities": []
       },
       "input": {
         "now": "2025-02-03T10:00",
+        "programStart": "2025-02-03T09:00",
         "lastActivityIndex": null,
         "contextCustomerId": null,
         "contextProjectId": null,
@@ -128,7 +131,7 @@
         "customerId": null,
         "projectId": null,
         "taskId": null,
-        "rangeNotNull": true
+        "range": ["2025-02-03T09:00", "2025-02-03T10:00"]
       }
     },
     {
@@ -156,7 +159,7 @@
       }
     },
     {
-      "description": "Szenario 3: Letzte Aktivität endet genau um 'jetzt' → DEFAULT_RANGE (now−1h, now)",
+      "description": "Szenario 3: Letzte Aktivität endet genau um 'jetzt' → Start=Programmstart (gerundet), Ende=jetzt (Rules.md)",
       "setup": {
         "customers": [
           { "id": "C", "name": "C", "projects": [ { "id": "P", "name": "P", "tasks": [ { "id": "T", "name": "T" } ] } ] }
@@ -167,6 +170,7 @@
       },
       "input": {
         "now": "2025-02-03T13:30",
+        "programStart": "2025-02-03T12:30",
         "lastActivityIndex": null,
         "contextCustomerId": null,
         "contextProjectId": null,
@@ -295,7 +299,7 @@
       }
     },
     {
-      "description": "Szenario 7: Keine Aktivität heute → DEFAULT_RANGE (Endzeit wird weitergesetzt)",
+      "description": "Szenario 7: Keine Aktivität heute → Start=Programmstart (gerundet), Ende=jetzt (DEFAULT_RANGE)",
       "setup": {
         "customers": [
           { "id": "C", "name": "C", "projects": [ { "id": "P", "name": "P", "tasks": [] } ] }
@@ -304,13 +308,15 @@
       },
       "input": {
         "now": "2025-02-03T10:00",
+        "programStart": "2025-02-03T09:00",
         "lastActivityIndex": null,
         "contextCustomerId": "C",
         "contextProjectId": null,
         "fromReminder": true
       },
       "expected": {
-        "suggestionType": "DEFAULT_RANGE"
+        "suggestionType": "DEFAULT_RANGE",
+        "range": ["2025-02-03T09:00", "2025-02-03T10:00"]
       }
     },
     {
@@ -332,6 +338,85 @@
       },
       "expected": {
         "suggestionType": "GAP"
+      }
+    },
+    {
+      "description": "Zeitvorschlag Regel 4: Wechsel zu anderem Kunde im Dialog → letztes Projekt/Task dieses Kunden, Range Ende letzte Aktivität bis jetzt",
+      "setup": {
+        "customers": [
+          { "id": "C1", "name": "C1", "projects": [ { "id": "P1", "name": "P1", "tasks": [ { "id": "T1", "name": "T1" } ] } ] },
+          { "id": "C2", "name": "C2", "projects": [ { "id": "P2", "name": "P2", "tasks": [ { "id": "T2", "name": "T2" } ] } ] }
+        ],
+        "activities": [
+          { "customerId": "C2", "projectId": "P2", "taskId": "T2", "from": "2025-02-03T09:00", "to": "2025-02-03T10:00" }
+        ]
+      },
+      "input": {
+        "now": "2025-02-03T11:00",
+        "lastActivityIndex": null,
+        "contextCustomerId": "C2",
+        "contextProjectId": null,
+        "fromReminder": false
+      },
+      "expected": {
+        "blockedForReminder": false,
+        "suggestionType": "GAP",
+        "customerId": "C2",
+        "projectId": "P2",
+        "taskId": "T2",
+        "range": ["2025-02-03T10:00", "2025-02-03T11:00"]
+      }
+    },
+    {
+      "description": "Zeitvorschlag Regel 5: Wechsel zu anderem Projekt (Kunde unverändert) im Dialog → letzte Task des Projekts, Range Ende letzte Aktivität bis jetzt",
+      "setup": {
+        "customers": [
+          { "id": "C", "name": "C", "projects": [ { "id": "P1", "name": "P1", "tasks": [ { "id": "T1", "name": "T1" } ] }, { "id": "P2", "name": "P2", "tasks": [ { "id": "T2", "name": "T2" } ] } ] }
+        ],
+        "activities": [
+          { "customerId": "C", "projectId": "P2", "taskId": "T2", "from": "2025-02-03T09:00", "to": "2025-02-03T10:00" }
+        ]
+      },
+      "input": {
+        "now": "2025-02-03T11:00",
+        "lastActivityIndex": null,
+        "contextCustomerId": "C",
+        "contextProjectId": "P2",
+        "fromReminder": false
+      },
+      "expected": {
+        "blockedForReminder": false,
+        "suggestionType": "GAP",
+        "customerId": "C",
+        "projectId": "P2",
+        "taskId": "T2",
+        "range": ["2025-02-03T10:00", "2025-02-03T11:00"]
+      }
+    },
+    {
+      "description": "Zeitvorschlag Regel 4 (Task): Kunde und Projekt unverändert im Dialog → Ende letzte Aktivität bis jetzt, letzte Task",
+      "setup": {
+        "customers": [
+          { "id": "C", "name": "C", "projects": [ { "id": "P", "name": "P", "tasks": [ { "id": "T1", "name": "T1" }, { "id": "T2", "name": "T2" } ] } ] }
+        ],
+        "activities": [
+          { "customerId": "C", "projectId": "P", "taskId": "T1", "from": "2025-02-03T09:00", "to": "2025-02-03T10:00" }
+        ]
+      },
+      "input": {
+        "now": "2025-02-03T11:00",
+        "lastActivityIndex": null,
+        "contextCustomerId": "C",
+        "contextProjectId": "P",
+        "fromReminder": false
+      },
+      "expected": {
+        "blockedForReminder": false,
+        "suggestionType": "GAP",
+        "customerId": "C",
+        "projectId": "P",
+        "taskId": "T1",
+        "range": ["2025-02-03T10:00", "2025-02-03T11:00"]
       }
     }
   ]

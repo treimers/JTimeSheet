@@ -2,10 +2,7 @@ package treimers.net.jtimesheet.service;
 
 import static javafx.util.Duration.millis;
 
-import java.time.DayOfWeek;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
-import java.util.Set;
 import java.util.function.Consumer;
 
 import javafx.animation.PauseTransition;
@@ -63,36 +60,9 @@ public class ReminderService {
     /**
      * Returns true if a reminder dialog should be shown at the given time: the time is within the
      * reminder window (weekday, start–end) and exactly on a reminder interval boundary (e.g. :00, :15, :30, :45 for 15 min).
+     * Uses {@link ReminderWindowRules} and {@link ReminderIntervalRules}.
      */
     public boolean isReminderDue(LocalDateTime now, AppSettings settings) {
-        if (!isWithinReminderWindow(now, settings)) {
-            return false;
-        }
-        int interval = AppSettings.normalizeReminderIntervalMinutes(settings.getReminderIntervalMinutes());
-        LocalDateTime truncated = now.truncatedTo(ChronoUnit.MINUTES);
-        LocalDateTime aligned = alignToReminderInterval(truncated, interval);
-        return truncated.equals(aligned);
-    }
-
-    private boolean isWithinReminderWindow(LocalDateTime now, AppSettings settings) {
-        Set<DayOfWeek> weekdays = settings.getReminderWeekdays();
-        if (weekdays == null || weekdays.isEmpty()) {
-            return false;
-        }
-        if (!weekdays.contains(now.getDayOfWeek())) {
-            return false;
-        }
-        return !now.toLocalTime().isBefore(settings.getReminderStartTime())
-                && !now.toLocalTime().isAfter(settings.getReminderEndTime());
-    }
-
-    private static LocalDateTime alignToReminderInterval(LocalDateTime time, int interval) {
-        LocalDateTime base = time.truncatedTo(ChronoUnit.MINUTES);
-        int minute = base.getMinute();
-        int mod = minute % interval;
-        if (mod != 0) {
-            base = base.plusMinutes(interval - mod);
-        }
-        return base;
+        return ReminderIntervalRules.isReminderDue(now, settings);
     }
 }

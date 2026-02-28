@@ -8,14 +8,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.EnumSet;
 import java.util.Set;
 import java.util.stream.Stream;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -26,30 +21,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import treimers.net.jtimesheet.model.AppSettings;
 
 /**
- * Tests for reminder timing: when is a reminder due (interval boundary, window, weekday).
- * <p>
- * Dokumentation der Reminder-Szenarien (Timing):
- * <ul>
- *   <li><b>Szenario 1:</b> Beim Programmstart kommt kein Reminder. (Timer ruft Callback nicht sofort auf.)</li>
- *   <li><b>Szenario 2:</b> Außerhalb der Reminder-Intervalle (Start, Ende, Wochentag) → isReminderDue false.</li>
- * </ul>
- * <p>
- * Die Testfälle für {@link ReminderService#isReminderDue} werden aus
- * {@code isReminderDueTestCases.json} geladen.
+ * Direct tests for {@link ReminderIntervalRules}. Ensures full coverage of docs/Rules.md
+ * "Reminder-Intervall" (10 rules: due on boundary, not on boundary, before/after window,
+ * no weekday, :00/:15/:30/:45, Sonntag-Override).
  */
-@DisplayName("ReminderService")
-class ReminderServiceTest {
+@org.junit.jupiter.api.DisplayName("ReminderIntervalRules (Rules.md: Reminder-Intervall)")
+class ReminderIntervalRulesTest {
 
     private static final String TEST_CASES_RESOURCE = "treimers/net/jtimesheet/service/isReminderDueTestCases.json";
 
-    private ReminderService service;
-
-    @BeforeEach
-    void setUp() {
-        service = new ReminderService();
-    }
-
-    static Stream<Arguments> isReminderDueTestCases() {
+    static Stream<Arguments> rulesMdReminderIntervallCases() {
         ObjectMapper mapper = new ObjectMapper();
         JsonNode root;
         try {
@@ -76,7 +57,7 @@ class ReminderServiceTest {
     }
 
     private static String getResourceAsString(String resource) throws IOException {
-        try (var in = ReminderServiceTest.class.getClassLoader().getResourceAsStream(resource)) {
+        try (var in = ReminderIntervalRulesTest.class.getClassLoader().getResourceAsStream(resource)) {
             if (in == null) {
                 throw new IOException("Resource not found: " + resource);
             }
@@ -100,7 +81,7 @@ class ReminderServiceTest {
             for (JsonNode d : s.get("weekdays")) {
                 days.add(DayOfWeek.valueOf(d.asText()));
             }
-            settings.setReminderWeekdays(EnumSet.copyOf(days));
+            settings.setReminderWeekdays(java.util.EnumSet.copyOf(days));
         }
         if (overlay != null && overlay != defaults) {
             if (overlay.has("windowStart") && overlay.has("windowEnd")) {
@@ -116,47 +97,15 @@ class ReminderServiceTest {
                 for (JsonNode d : overlay.get("weekdays")) {
                     days.add(DayOfWeek.valueOf(d.asText()));
                 }
-                settings.setReminderWeekdays(EnumSet.copyOf(days));
+                settings.setReminderWeekdays(java.util.EnumSet.copyOf(days));
             }
         }
         return settings;
     }
 
-    @Nested
-    @DisplayName("Szenario 2: isReminderDue – wann kommt ein Reminder (Intervall, Fenster, Wochentag)")
-    class IsReminderDue {
-
-        @ParameterizedTest(name = "{0}")
-        @MethodSource("treimers.net.jtimesheet.service.ReminderServiceTest#isReminderDueTestCases")
-        @DisplayName("isReminderDue(now, settings) gemäß JSON-Spezifikation")
-        void fromJson(String description, LocalDateTime now, AppSettings settings, boolean expected) {
-            assertEquals(expected, service.isReminderDue(now, settings), description);
-        }
-    }
-
-    @Nested
-    @DisplayName("Reminder-Ausnahme 1 (Rules.md): Kein Reminder beim Programmstart")
-    class NoReminderOnStartup {
-
-        @Test
-        @DisplayName("Ohne start() wird tick() nicht ausgelöst – Ausnahme 1 in ReminderService.start() (kein sofortiger onTick-Aufruf)")
-        void withoutStartTickDoesNotInvokeCallback() {
-            // Rules.md Reminder-Ausnahme 1: "Das Programm wird gestartet" → kein Reminder.
-            // Implementierung: ReminderService.start() ruft onTick nicht im start()-Body auf.
-            // start() benötigt JavaFX; hier prüfen wir: ohne start() ist kein Callback registriert.
-            service.tick(LocalDateTime.of(2025, 2, 3, 16, 15));
-            // Kein NPE, kein Aufruf – korrekt, da onTick null ist (start() nicht aufgerufen).
-        }
-    }
-
-    @Nested
-    @DisplayName("tick(now) – Testbarkeit (Parameter 'jetzt')")
-    class Tick {
-
-        @Test
-        @DisplayName("tick(now) wirft nicht, wenn nicht gestartet")
-        void tickSafeWhenNotStarted() {
-            service.tick(LocalDateTime.of(2025, 2, 3, 16, 15));
-        }
+    @ParameterizedTest(name = "Rules.md Reminder-Intervall: {0}")
+    @MethodSource("rulesMdReminderIntervallCases")
+    void isReminderDueGemäßRulesMd(String description, LocalDateTime now, AppSettings settings, boolean expected) {
+        assertEquals(expected, ReminderIntervalRules.isReminderDue(now, settings), description);
     }
 }
