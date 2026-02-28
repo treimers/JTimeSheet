@@ -39,6 +39,12 @@ import treimers.net.jtimesheet.model.Language;
 
 public class SettingsDialogView {
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
+    /** Display for reminder end time "until midnight"; stored as 00:00. */
+    private static final String END_OF_DAY_LABEL = "24:00";
+
+    /** Option for reminder end: time value plus display label (so 00:00 and 24:00 can both be offered). */
+    private record TimeDisplayOption(LocalTime time, String display) {}
+
     private final ResourceBundle messages;
     private final Locale locale;
 
@@ -128,13 +134,13 @@ public class SettingsDialogView {
 
         List<LocalTime> timeOptions = createTimeOptions();
         ComboBox<LocalTime> reminderStartChoice = new ComboBox<>(FXCollections.observableArrayList(timeOptions));
-        ComboBox<LocalTime> reminderEndChoice = new ComboBox<>(FXCollections.observableArrayList(timeOptions));
+        List<TimeDisplayOption> endTimeOptions = createEndTimeOptions();
+        ComboBox<TimeDisplayOption> reminderEndChoice = new ComboBox<>(FXCollections.observableArrayList(endTimeOptions));
         LocalTime currentStart = settings.getReminderStartTime();
         LocalTime currentEnd = settings.getReminderEndTime();
         ensureTimeOption(reminderStartChoice, currentStart);
-        ensureTimeOption(reminderEndChoice, currentEnd);
         reminderStartChoice.getSelectionModel().select(currentStart);
-        reminderEndChoice.getSelectionModel().select(currentEnd);
+        selectEndTimeOption(reminderEndChoice, currentEnd);
         reminderStartChoice.setCellFactory(listView -> new ListCell<>() {
             @Override
             protected void updateItem(LocalTime item, boolean empty) {
@@ -148,13 +154,13 @@ public class SettingsDialogView {
         });
         reminderEndChoice.setCellFactory(listView -> new ListCell<>() {
             @Override
-            protected void updateItem(LocalTime item, boolean empty) {
+            protected void updateItem(TimeDisplayOption item, boolean empty) {
                 super.updateItem(item, empty);
                 if (empty || item == null) {
                     setText(null);
                     return;
                 }
-                setText(TIME_FORMAT.format(item));
+                setText(item.display());
             }
         });
         reminderStartChoice.setConverter(new StringConverter<>() {
@@ -170,13 +176,13 @@ public class SettingsDialogView {
         });
         reminderEndChoice.setConverter(new StringConverter<>() {
             @Override
-            public String toString(LocalTime value) {
-                return value == null ? "" : TIME_FORMAT.format(value);
+            public String toString(TimeDisplayOption value) {
+                return value == null ? "" : value.display();
             }
 
             @Override
-            public LocalTime fromString(String string) {
-                return currentEnd;
+            public TimeDisplayOption fromString(String string) {
+                return reminderEndChoice.getValue();
             }
         });
 
@@ -303,11 +309,12 @@ public class SettingsDialogView {
                 selectedWeekdays.add(e.getKey());
             }
         }
+        TimeDisplayOption selectedEnd = reminderEndChoice.getValue();
         return Optional.of(new SettingsResult(
             timeGridChoice.getValue(),
             reminderIntervalChoice.getValue(),
             reminderStartChoice.getValue(),
-            reminderEndChoice.getValue(),
+            selectedEnd != null ? selectedEnd.time() : null,
             selectedWeekdays,
             firstDayOfWeekChoice.getValue(),
             languageChoice.getValue(),
@@ -337,6 +344,36 @@ public class SettingsDialogView {
             options.add(LocalTime.MIDNIGHT.plusMinutes((long) i * stepMinutes));
         }
         return options;
+    }
+
+    /** End time options: 00:00, 00:15, … 23:45 and additionally 24:00 (stored as 00:00). */
+    private List<TimeDisplayOption> createEndTimeOptions() {
+        List<TimeDisplayOption> options = new ArrayList<>();
+        for (LocalTime t : createTimeOptions()) {
+            options.add(new TimeDisplayOption(t, TIME_FORMAT.format(t)));
+        }
+        options.add(new TimeDisplayOption(LocalTime.MIDNIGHT, END_OF_DAY_LABEL));
+        return options;
+    }
+
+    private void selectEndTimeOption(ComboBox<TimeDisplayOption> comboBox, LocalTime currentEnd) {
+        if (currentEnd == null) {
+            return;
+        }
+        if (currentEnd.equals(LocalTime.MIDNIGHT)) {
+            for (TimeDisplayOption opt : comboBox.getItems()) {
+                if (END_OF_DAY_LABEL.equals(opt.display())) {
+                    comboBox.getSelectionModel().select(opt);
+                    return;
+                }
+            }
+        }
+        for (TimeDisplayOption opt : comboBox.getItems()) {
+            if (currentEnd.equals(opt.time()) && !END_OF_DAY_LABEL.equals(opt.display())) {
+                comboBox.getSelectionModel().select(opt);
+                return;
+            }
+        }
     }
 
     private void ensureTimeOption(ComboBox<LocalTime> comboBox, LocalTime value) {

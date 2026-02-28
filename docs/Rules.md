@@ -93,6 +93,8 @@ Solange ein Reminder- oder Add-Activity-Dialog (oder Bearbeiten-Dialog) offen is
 
 1. Nach jedem Reminder-Intervall darf kein neuer Reminder-Dialog erscheinen. Wenn ein Reminder-Dialog aktiv ist, soll nur darin die Endezeit weitergesetzt werden. Das gilt auch für Add-Activity-Dialoge. Auch dort muss das Ende weitergesetzt werden, ohne dass ein weiterer Dialog aufpoppt.
 
+1. Das Weitersetzen der Ende-Zeit im geöffneten Reminder- oder Add-Activity-Dialog darf nur bis zum Ende der Kernzeit erfolgen.
+
 1. Wenn ich Kunden, Projekte oder Tasks lösche, muss ein Hinweis kommen, wenn nach Aktivitäten vorhanden sind. In diesem Falle soll es "Inkl. Aktivitäten löschen" als Option geben. Dabei muss auch der Kalender berücksichtigt werden.
 
 # Bug fixes

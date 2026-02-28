@@ -44,6 +44,21 @@ class ReminderWindowRulesTest {
             LocalDateTime now = LocalDateTime.parse(c.get("now").asText());
             boolean expected = c.get("expected").asBoolean();
             AppSettings settings = buildSettings(defaultSettings);
+            if (c.has("overrideSettings")) {
+                JsonNode over = c.get("overrideSettings");
+                if (over.has("windowStart") && over.has("windowEnd")) {
+                    settings.setReminderWindow(
+                        LocalTime.parse(over.get("windowStart").asText()),
+                        LocalTime.parse(over.get("windowEnd").asText()));
+                }
+                if (over.has("weekdays") && over.get("weekdays").isArray()) {
+                    Set<DayOfWeek> days = new java.util.HashSet<>();
+                    for (JsonNode d : over.get("weekdays")) {
+                        days.add(DayOfWeek.valueOf(d.asText()));
+                    }
+                    settings.setReminderWeekdays(EnumSet.copyOf(days));
+                }
+            }
             builder.add(Arguments.of(description, now, settings, expected));
         }
         return builder.build();

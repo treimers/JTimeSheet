@@ -51,8 +51,21 @@ public class AppSettings {
         return reminderEndTime;
     }
 
+    /**
+     * Sets the reminder time window. End can be {@link LocalTime#MIDNIGHT} (00:00) to mean "until end of day" (24:00).
+     */
     public void setReminderWindow(LocalTime start, LocalTime end) {
-        if (start == null || end == null || !start.isBefore(end)) {
+        if (start == null || end == null) {
+            reminderStartTime = LocalTime.of(9, 0);
+            reminderEndTime = LocalTime.of(17, 0);
+            return;
+        }
+        if (end.equals(LocalTime.MIDNIGHT)) {
+            reminderStartTime = start;
+            reminderEndTime = end;
+            return;
+        }
+        if (!start.isBefore(end)) {
             reminderStartTime = LocalTime.of(9, 0);
             reminderEndTime = LocalTime.of(17, 0);
             return;
