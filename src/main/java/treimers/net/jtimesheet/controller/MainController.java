@@ -3349,7 +3349,7 @@ public class MainController {
     }
 
     private Optional<ActivityInput> showActivityDialog(String title, Activity existing) {
-        return showActivityDialog(title, existing, null, null, null, null, null, null, null, 0);
+        return showActivityDialog(title, existing, null, null, null, null, null, null, null, 0, null);
     }
 
     private Optional<ActivityInput> showActivityDialog(
@@ -3405,6 +3405,7 @@ public class MainController {
             this::openManagementDialog,
             primaryStage,
             endTimeRefreshIntervalMinutes,
+            endTimeRefreshIntervalMinutes > 0 ? settings.getReminderEndTime() : null,
             () -> activityDialogOpen = true,
             () -> activityDialogOpen = false
         );

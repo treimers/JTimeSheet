@@ -79,7 +79,7 @@ Es ist wichtig, dass bei Wechsel des Kunden oder des Projekts entweder die letzt
 
 ## Reminder-Dialog und Add-Activity-Dialog
 
-Wenn der Reminder oder Add-Activity-Dialog länger als das Zeitraster geöffnet stehenbleiben, soll die Ende-Zeit bei jedem Zeitpunkt im Reminder-Intervall automatisch weitergesetzt werden, aber nie über das Tagesende hinaus.
+Wenn der Reminder oder Add-Activity-Dialog länger als das Zeitraster geöffnet stehenbleiben, soll die Ende-Zeit bei jedem Zeitpunkt im Reminder-Intervall automatisch weitergesetzt werden, aber nie über das Kernzeitende hinaus.
 
 Solange ein Reminder- oder Add-Activity-Dialog (oder Bearbeiten-Dialog) offen ist, darf weder ein neuer Reminder-Dialog noch ein weiterer Add-Activity-Dialog geöffnet werden; stattdessen wird nur die Endezeit im bestehenden Dialog weitergesetzt.
 
@@ -91,10 +91,11 @@ Solange ein Reminder- oder Add-Activity-Dialog (oder Bearbeiten-Dialog) offen is
 
 # Features
 
-1. Nach jedem Reminder-Intervall darf kein neuer Reminder-Dialog erscheinen. Wenn ein Reminder-Dialog aktiv ist, soll nur darin die Endezeit weitergesetzt werden. Das gilt auch für Add-Activity-Dialoge. Auch dort muss das Ende weitergesetzt werden, ohne dass ein weiterer Dialog aufpoppt.
-
-1. Das Weitersetzen der Ende-Zeit im geöffneten Reminder- oder Add-Activity-Dialog darf nur bis zum Ende der Kernzeit erfolgen.
-
 1. Wenn ich Kunden, Projekte oder Tasks lösche, muss ein Hinweis kommen, wenn nach Aktivitäten vorhanden sind. In diesem Falle soll es "Inkl. Aktivitäten löschen" als Option geben. Dabei muss auch der Kalender berücksichtigt werden.
 
+1. Alle Dialoge sollen mit der Escape-Taste beendet werden können.
+
 # Bug fixes
+
+1. Laut docs/Rules.md soll die Ende-Zeit im Reminder-/Add-Activity-Dialog bei jedem Reminder-Intervall automatisch weitergesetzt werden, aber nie über das Kernzeitende (Reminder-Fenster-Ende) hinaus.
+In der Implementierung wurde die Ende-Zeit nur auf „jetzt“ (gerundet auf das Zeitraster) gesetzt, ohne Begrenzung auf das Kernzeitende. Dadurch konnte „Bis“ z.B. auf 17:15, 17:30 usw. laufen, wenn der Dialog nach 17:00 offen blieb.

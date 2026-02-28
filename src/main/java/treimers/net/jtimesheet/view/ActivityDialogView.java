@@ -72,6 +72,7 @@ public class ActivityDialogView {
         Consumer<Window> onOpenManage,
         Window owner,
         int endTimeRefreshIntervalMinutes,
+        LocalTime maxEndTimeToday,
         Runnable onDialogShown,
         Runnable onDialogHidden
     ) {
@@ -382,10 +383,11 @@ public class ActivityDialogView {
             });
             if (endTimeRefreshIntervalMinutes > 0) {
                 final int intervalMin = endTimeRefreshIntervalMinutes;
+                final LocalTime maxEnd = maxEndTimeToday;
                 Runnable refresh = () -> refreshEndTimeToNow(
                     datePicker, fromHourChoice, fromMinuteChoice,
                     toHourChoice, toMinuteChoice, durationTextField,
-                    updating, timeGridMinutes
+                    updating, timeGridMinutes, maxEnd
                 );
                 long delayMs = delayMillisUntilNextIntervalBoundary(intervalMin);
                 Timeline first = new Timeline(new KeyFrame(javafx.util.Duration.millis(Math.max(1, delayMs)), e2 -> {
@@ -434,6 +436,7 @@ public class ActivityDialogView {
     /**
      * Updates the "to" time to current time (aligned to grid) and refreshes duration.
      * Only applies when the selected date is today (reminder: end time = current time).
+     * The end time is never set beyond {@code maxEndTimeToday} (Kernzeitende).
      */
     private void refreshEndTimeToNow(
         DatePicker datePicker,
@@ -443,7 +446,8 @@ public class ActivityDialogView {
         ComboBox<Integer> toMinuteChoice,
         TextField durationTextField,
         boolean[] updating,
-        int timeGridMinutes
+        int timeGridMinutes,
+        LocalTime maxEndTimeToday
     ) {
         if (updating[0]) {
             return;
@@ -452,7 +456,18 @@ public class ActivityDialogView {
         if (selectedDate == null || !selectedDate.equals(LocalDate.now())) {
             return;
         }
-        LocalDateTime to = alignToGrid(LocalDateTime.now(), timeGridMinutes);
+        LocalDateTime nowOnGrid = alignToGrid(LocalDateTime.now(), timeGridMinutes);
+        LocalDateTime to = nowOnGrid;
+        if (maxEndTimeToday != null) {
+            LocalTime endCap = maxEndTimeToday.equals(LocalTime.MIDNIGHT)
+                ? LocalTime.of(23, 59)
+                : maxEndTimeToday;
+            LocalDateTime cap = selectedDate.atTime(endCap);
+            LocalDateTime capOnGrid = alignToGrid(cap, timeGridMinutes);
+            if (to.isAfter(capOnGrid)) {
+                to = capOnGrid;
+            }
+        }
         updating[0] = true;
         try {
             setTimeSelection(toHourChoice, toMinuteChoice, to.getHour(), to.getMinute(), timeGridMinutes);
