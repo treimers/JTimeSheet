@@ -63,6 +63,7 @@ import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.collections.transformation.SortedList;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
@@ -80,6 +81,7 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.SelectionMode;
 import javafx.scene.control.Separator;
 import javafx.scene.control.SeparatorMenuItem;
@@ -95,6 +97,7 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
@@ -227,6 +230,8 @@ public class MainController {
     private TabPane viewTabPane;
     private VBox activityPanel;
     private Node calendarViewNode;
+    private Tab calendarTab;
+    private boolean calendarContentCreated;
     private static final int CALENDAR_TAB_INDEX = 1;
     private CalendarSource calendarSource;
     private Map<String, Calendar<Activity>> calendarsByCustomerProject = new HashMap<>();
@@ -287,13 +292,14 @@ public class MainController {
         mainTab.setContent(mainTabContent);
         viewTabPane.getTabs().add(mainTab);
 
-        calendarViewNode = createCalendarContent();
-        Tab calendarTab = new Tab(i18n("view.tab.calendar"));
+        calendarViewNode = createCalendarPlaceholder();
+        calendarTab = new Tab(i18n("view.tab.calendar"));
         calendarTab.setClosable(false);
         calendarTab.setContent(calendarViewNode);
         viewTabPane.getTabs().add(calendarTab);
 
         viewTabPane.getSelectionModel().selectedIndexProperty().addListener((obs, oldIdx, newIdx) -> {
+            ensureCalendarContentCreated(newIdx == null ? -1 : newIdx.intValue());
             updateTableOrCalendarVisibility();
             applyFilters();
             updateWriteTimesheetButtonForTab();
@@ -783,6 +789,31 @@ public class MainController {
 
     private void updateTableOrCalendarVisibility() {
         // Tab content (main = header+filter+table, calendar = calendar) is switched by TabPane; nothing else to do here.
+    }
+
+    /** Creates a lightweight placeholder for the calendar tab. The real CalendarView is built on first tab switch (lazy loading). */
+    private Node createCalendarPlaceholder() {
+        ProgressIndicator spinner = new ProgressIndicator();
+        spinner.setMaxSize(48, 48);
+        Label label = new Label(i18n("calendar.loading"));
+        VBox box = new VBox(12, spinner, label);
+        box.setAlignment(Pos.CENTER);
+        return new StackPane(box);
+    }
+
+    /** If the user switched to the calendar tab and the calendar was not yet built, create it asynchronously to keep UI responsive. */
+    private void ensureCalendarContentCreated(int selectedIndex) {
+        if (selectedIndex != CALENDAR_TAB_INDEX || calendarContentCreated) {
+            return;
+        }
+        calendarContentCreated = true;
+        Platform.runLater(() -> {
+            Node cal = createCalendarContent();
+            calendarViewNode = cal;
+            if (calendarTab != null) {
+                calendarTab.setContent(cal);
+            }
+        });
     }
 
     private Node createCalendarContent() {
