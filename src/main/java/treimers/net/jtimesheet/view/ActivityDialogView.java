@@ -217,6 +217,16 @@ public class ActivityDialogView {
         }
         fromDateTime = alignToGrid(fromDateTime, timeGridMinutes);
         toDateTime = alignToGrid(toDateTime, timeGridMinutes);
+        if (maxEndTimeToday != null && toDateTime != null && toDateTime.toLocalDate().equals(LocalDate.now())) {
+            LocalTime endCap = maxEndTimeToday.equals(LocalTime.MIDNIGHT)
+                ? LocalTime.of(23, 59)
+                : maxEndTimeToday;
+            LocalDateTime cap = toDateTime.toLocalDate().atTime(endCap);
+            LocalDateTime capOnGrid = alignToGrid(cap, timeGridMinutes);
+            if (toDateTime.isAfter(capOnGrid)) {
+                toDateTime = capOnGrid;
+            }
+        }
 
         if (defaultCustomer != null) {
             customerChoice.getSelectionModel().select(defaultCustomer);

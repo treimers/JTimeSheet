@@ -12,6 +12,7 @@
     { "description": "Nicht auf Intervall-Grenze (z. B. 16:05 bei 15-min) → nicht due", "now": "2025-02-03T16:05", "expected": false },
     { "description": "Vor Fenster-Start → nicht due", "now": "2025-02-03T08:00", "expected": false },
     { "description": "Nach Fenster-Ende → nicht due", "now": "2025-02-03T18:00", "expected": false },
+    { "description": "Kernzeitende 18:00 – um 18:15 darf kein Reminder kommen", "now": "2025-02-03T18:15", "expected": false, "settings": { "windowStart": "09:00", "windowEnd": "18:00" } },
     { "description": "Kein Reminder-Wochentag (Samstag) → nicht due", "now": "2025-02-01T10:00", "expected": false },
     { "description": "Auf Grenze :00 im Fenster → due", "now": "2025-02-03T10:00", "expected": true },
     { "description": "Auf Grenze :15 im Fenster → due", "now": "2025-02-03T10:15", "expected": true },

@@ -2457,7 +2457,8 @@ public class MainController {
                     reopenWith != null ? reopenWith.getTask() : defaultTask,
                     this::getLastProjectAndTaskForCustomer,
                     this::suggestedPromptRangeForSelection,
-                    settings.getReminderIntervalMinutes());
+                    settings.getReminderIntervalMinutes(),
+                    settings.getReminderIntervalMinutes() > 0 ? settings.getReminderEndTime() : null);
             if (!input.isPresent()) {
                 return;
             }
@@ -3215,7 +3216,8 @@ public class MainController {
                     reopenWith.getTask(),
                     null,
                     null,
-                    0
+                    0,
+                    null
                 )
                 : showActivityDialog(i18n("activity.edit.title"), selected);
             if (!input.isPresent()) {
@@ -3362,7 +3364,8 @@ public class MainController {
         Task defaultTask,
         Function<Customer, DefaultProjectAndTask> defaultSelectionForCustomer,
         java.util.function.BiFunction<Customer, Project, LocalDateTime[]> suggestedRangeForSelection,
-        int endTimeRefreshIntervalMinutes
+        int endTimeRefreshIntervalMinutes,
+        java.time.LocalTime maxEndTimeToday
     ) {
         LocalDateTime fromDateTime = defaultFrom;
         LocalDateTime toDateTime = defaultTo;
@@ -3405,7 +3408,7 @@ public class MainController {
             this::openManagementDialog,
             primaryStage,
             endTimeRefreshIntervalMinutes,
-            endTimeRefreshIntervalMinutes > 0 ? settings.getReminderEndTime() : null,
+            maxEndTimeToday,
             () -> activityDialogOpen = true,
             () -> activityDialogOpen = false
         );
