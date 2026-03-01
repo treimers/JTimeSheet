@@ -95,6 +95,8 @@ Solange ein Reminder- oder Add-Activity-Dialog (oder Bearbeiten-Dialog) offen is
 
 1. Alle Dialoge sollen mit der Escape-Taste beendet werden können.
 
+1. Der Export von Staundenzetteln soll immer, also in allen Ansichten möglich sein. Dabei soll sich ein Abfragedialog öffnen, der nach dem Kunden und dem Projekt sowie dem Zeitraum fragt. Beim Export soll nicht alle Kunden stehen, sondern direkt der Kunde und das Projekt der letzten Aktivität. Wenn es das nicht gibt, werden der erste Kunde und das erste Projekt ausgewählt. Gibt es keinen Kunden oder Projekt, muss ein Hinweis-Dialog kommen. Außerdem soll man den Zeitraum wie Tag, Woche, Monat oder Custom genauso auswählen können, wie in der Hauptansicht. Default soll der letzte Monat sein, wenn der aktuelle Tag des Monats zwischen 1 und 14 liegt, ansonsten der aktuelle Monat.
+
 # Bug fixes
 
 1. Laut docs/Rules.md soll die Ende-Zeit im Reminder-/Add-Activity-Dialog bei jedem Reminder-Intervall automatisch weitergesetzt werden, aber nie über das Kernzeitende (Reminder-Fenster-Ende) hinaus.

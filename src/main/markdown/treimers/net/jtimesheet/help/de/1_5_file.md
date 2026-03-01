@@ -10,9 +10,9 @@
 
 ## Stundenzettel schreiben
 
-**Datei → Stundenzettel schreiben…** – Schreibt die sichtbaren Aktivitäten in einen **Excel**-Stundenzettel. Voraussetzung:
+**Datei → Stundenzettel schreiben…** (oder Symbolleiste) – Ist in **allen Ansichten** verfügbar. Beim Aufruf öffnet sich ein **Abfragedialog**, in dem Sie **Kunde**, **Projekt** (optional; leer = alle Projekte) und **Zeitraum** (Von/Bis) wählen. Die Anwendung filtert die Aktivitäten nach diesen Angaben und schreibt sie in einen **Excel**-Stundenzettel. Voraussetzung:
 
-1. Ein **Kunde** muss ausgewählt sein (über den Filter der Hauptansicht oder eine Ansicht mit festem Kunden).
+1. Im Dialog muss ein **Kunde** ausgewählt werden.
 2. Der Kunde muss unter Verwalten → Eigenschaften **Stundenzettel-Einstellungen** haben: **Tabellennummer**, **Excel-Vorlage** (Pfad zu einer vorhandenen .xls- oder .xlsx-Datei) und optional **Stundenzettel-Dateiname** und **Aufgaben-Trenner**.
 
 Die Anwendung füllt die Vorlage mit den Aktivitätsdaten (Datum, Zeiten, Pausen, Aufgaben) und Sie speichern die resultierende Datei. **Format:** Die Erweiterung der Zieldatei (.xls oder .xlsx) richtet sich immer nach der Vorlage; der vorgeschlagene Dateiname verwendet die gleiche Erweiterung.

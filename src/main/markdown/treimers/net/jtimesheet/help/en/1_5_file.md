@@ -10,9 +10,9 @@
 
 ## Write Timesheet
 
-**File → Write Timesheet…** – Exports the visible activities into an **Excel** timesheet. You must:
+**File → Write Timesheet…** (or toolbar) – Available in **all views**. When invoked, a **query dialog** opens where you choose **customer**, **project** (optional; leave empty for all projects), and **date range** (from/to). The application filters activities by these criteria and writes them to an **Excel** timesheet. You must:
 
-1. Select a **customer** (via the main view filter or a view tab that has a fixed customer).
+1. Select a **customer** in the dialog.
 2. The customer must have **timesheet settings** in Manage → Properties: **sheet number**, **Excel template** (path to an existing .xls or .xlsx file), and optionally **timesheet file name** and **task separator**.
 
 The application fills the template with the activity data (dates, times, pauses, tasks) and lets you save the resulting file. **Format:** The output file extension (.xls or .xlsx) always matches the template; the suggested file name uses the same extension.

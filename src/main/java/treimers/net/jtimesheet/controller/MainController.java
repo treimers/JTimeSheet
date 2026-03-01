@@ -492,36 +492,8 @@ public class MainController {
         alert.showAndWait();
     }
 
-    private Customer getCurrentCustomerForTimesheet() {
-        if (viewTabPane == null) {
-            return customerFilter != null ? customerFilter.getValue() : null;
-        }
-        int idx = viewTabPane.getSelectionModel().getSelectedIndex();
-        if (idx <= 0 || idx == CALENDAR_TAB_INDEX) {
-            return customerFilter != null ? customerFilter.getValue() : null;
-        }
-        int stateIndex = idx - 2;
-        if (stateIndex >= 0 && stateIndex < viewTabStates.size()) {
-            return viewTabStates.get(stateIndex).getFixedCustomer();
-        }
-        return null;
-    }
-
     private void updateWriteTimesheetButtonForTab() {
-        if (writeTimesheetButton == null || writeTimesheetMenuItem == null) {
-            return;
-        }
-        int idx = viewTabPane != null ? viewTabPane.getSelectionModel().getSelectedIndex() : 0;
-        if (idx <= 0 || idx == CALENDAR_TAB_INDEX) {
-            writeTimesheetMenuItem.disableProperty().bind(customerFilter.valueProperty().isNull());
-            writeTimesheetButton.disableProperty().bind(customerFilter.valueProperty().isNull());
-        } else {
-            writeTimesheetMenuItem.disableProperty().unbind();
-            writeTimesheetButton.disableProperty().unbind();
-            boolean hasCustomer = getCurrentCustomerForTimesheet() != null;
-            writeTimesheetMenuItem.setDisable(!hasCustomer);
-            writeTimesheetButton.setDisable(!hasCustomer);
-        }
+        // Stundenzettel-Export ist in allen Ansichten möglich; Auswahl erfolgt im Abfragedialog.
     }
 
     private Label sectionHeader(String text) {
@@ -1152,12 +1124,6 @@ public class MainController {
         customerFilter.setPrefWidth(180);
         customerFilter.setButtonCell(createCustomerFilterCell(i18n("filter.customer.placeholder")));
         customerFilter.setCellFactory(listView -> createCustomerFilterCell(i18n("filter.customer.placeholder")));
-        if (writeTimesheetMenuItem != null) {
-            writeTimesheetMenuItem.disableProperty().bind(customerFilter.valueProperty().isNull());
-        }
-        if (writeTimesheetButton != null) {
-            writeTimesheetButton.disableProperty().bind(customerFilter.valueProperty().isNull());
-        }
 
         projectFilter = new ComboBox<>();
         projectFilter.setPromptText(i18n("filter.project.placeholder"));
@@ -2587,9 +2553,56 @@ public class MainController {
             showInfo(i18n("timesheet.none"));
             return;
         }
-        Customer selectedCustomer = getCurrentCustomerForTimesheet();
-        if (selectedCustomer == null) {
-            showInfo(i18n("timesheet.customer.required"));
+        if (customers.isEmpty()) {
+            showInfo(i18n("timesheet.export.no.customer.or.project"));
+            return;
+        }
+        Customer initialCustomer = null;
+        Project initialProject = null;
+        if (lastActivity != null) {
+            initialCustomer = findCustomerById(lastActivity.getCustomerId());
+            initialProject = initialCustomer != null ? findProjectById(initialCustomer, lastActivity.getProjectId()) : null;
+        }
+        if (initialCustomer == null) {
+            initialCustomer = customers.get(0);
+        }
+        if (initialProject == null && initialCustomer != null && !initialCustomer.getProjects().isEmpty()) {
+            initialProject = initialCustomer.getProjects().get(0);
+        }
+        if (initialCustomer == null || initialCustomer.getProjects().isEmpty()) {
+            showInfo(i18n("timesheet.export.no.customer.or.project"));
+            return;
+        }
+        if (initialProject == null) {
+            initialProject = initialCustomer.getProjects().get(0);
+        }
+        TimesheetExportChoice choice = showTimesheetExportDialog(initialCustomer, initialProject);
+        if (choice == null) {
+            return;
+        }
+        Customer selectedCustomer = choice.customer;
+        Project selectedProject = choice.project;
+        LocalDate fromDate = choice.from;
+        LocalDate toDate = choice.to;
+        List<Activity> exportActivities = new ArrayList<>();
+        for (Activity a : activities) {
+            if (!selectedCustomer.getId().equals(a.getCustomerId())) {
+                continue;
+            }
+            if (selectedProject != null && !selectedProject.getId().equals(a.getProjectId())) {
+                continue;
+            }
+            if (fromDate != null || toDate != null) {
+                LocalDateTime activityFrom = Activity.parseStoredDateTime(a.getFrom());
+                if (activityFrom == null) continue;
+                LocalDate ad = activityFrom.toLocalDate();
+                if (fromDate != null && ad.isBefore(fromDate)) continue;
+                if (toDate != null && ad.isAfter(toDate)) continue;
+            }
+            exportActivities.add(a);
+        }
+        if (exportActivities.isEmpty()) {
+            showInfo(i18n("timesheet.none"));
             return;
         }
         if (!hasRequiredTimesheetConfig(selectedCustomer)) {
@@ -2605,10 +2618,6 @@ public class MainController {
         if (outputFile == null) {
             return;
         }
-        List<Activity> exportActivities = filteredActivities != null
-            ? new ArrayList<>(filteredActivities)
-            : new ArrayList<>(activities);
-        exportActivities.removeIf(activity -> !selectedCustomer.getId().equals(activity.getCustomerId()));
         TimesheetWriter writer = new TimesheetWriter();
         Properties properties = buildTimesheetProperties(selectedCustomer);
         try {
@@ -2624,6 +2633,188 @@ public class MainController {
         } catch (IOException | IllegalArgumentException exception) {
             showInfo(i18n("timesheet.write.error", exception.getMessage()));
         }
+    }
+
+    /** User choices from the timesheet export dialog. */
+    private static final class TimesheetExportChoice {
+        final Customer customer;
+        final Project project;
+        final LocalDate from;
+        final LocalDate to;
+
+        TimesheetExportChoice(Customer customer, Project project, LocalDate from, LocalDate to) {
+            this.customer = customer;
+            this.project = project;
+            this.from = from;
+            this.to = to;
+        }
+    }
+
+    /**
+     * Shows the timesheet export dialog. Uses only local controls and does not read or modify
+     * any view filters (customerFilter, projectFilter, fromFilter, toFilter, presetFilter or view tab states).
+     */
+    private TimesheetExportChoice showTimesheetExportDialog(Customer initialCustomer, Project initialProject) {
+        List<Customer> customersWithProjects = new ArrayList<>();
+        for (Customer c : customers) {
+            if (c != null && !c.getProjects().isEmpty()) {
+                customersWithProjects.add(c);
+            }
+        }
+        ComboBox<Customer> customerCombo = new ComboBox<>(FXCollections.observableArrayList(customersWithProjects));
+        customerCombo.setPrefWidth(220);
+        customerCombo.setButtonCell(createCustomerFilterCell(i18n("filter.customer.placeholder")));
+        customerCombo.setCellFactory(lv -> createCustomerFilterCell(i18n("filter.customer.placeholder")));
+        customerCombo.setValue(initialCustomer);
+
+        ComboBox<Project> projectCombo = new ComboBox<>();
+        projectCombo.setPrefWidth(220);
+        projectCombo.setButtonCell(createProjectFilterCell(i18n("filter.project.placeholder")));
+        projectCombo.setCellFactory(lv -> createProjectFilterCell(i18n("filter.project.placeholder")));
+        projectCombo.setItems(FXCollections.observableArrayList(initialCustomer.getProjects()));
+        projectCombo.setValue(initialProject);
+        customerCombo.valueProperty().addListener((obs, o, c) -> {
+            if (c == null) {
+                projectCombo.setItems(FXCollections.observableArrayList());
+                projectCombo.setValue(null);
+            } else {
+                projectCombo.setItems(FXCollections.observableArrayList(c.getProjects()));
+                projectCombo.setValue(c.getProjects().isEmpty() ? null : c.getProjects().get(0));
+            }
+        });
+
+        LocalDate today = LocalDate.now();
+        LocalDate refMonth = (today.getDayOfMonth() >= 1 && today.getDayOfMonth() <= 14)
+            ? today.minusMonths(1) : today;
+        LocalDate defaultFrom = refMonth.with(TemporalAdjusters.firstDayOfMonth());
+        LocalDate defaultTo = refMonth.with(TemporalAdjusters.lastDayOfMonth());
+
+        ComboBox<PresetRange> presetCombo = new ComboBox<>();
+        presetCombo.getItems().setAll(PresetRange.values());
+        presetCombo.setPrefWidth(140);
+        presetCombo.setButtonCell(createPresetCell());
+        presetCombo.setCellFactory(lv -> createPresetCell());
+
+        DatePicker fromPicker = new DatePicker(defaultFrom);
+        DatePicker toPicker = new DatePicker(defaultTo);
+
+        final boolean[] applyingPreset = { false };
+        final boolean[] initializing = { true };
+        presetCombo.valueProperty().addListener((obs, o, preset) -> {
+            if (initializing[0]) return;
+            if (preset == null || preset == PresetRange.CUSTOM) return;
+            applyingPreset[0] = true;
+            DayOfWeek firstDay = settings.getFirstDayOfWeek();
+            LocalDate t = LocalDate.now();
+            switch (preset) {
+                case DAY -> {
+                    fromPicker.setValue(t);
+                    toPicker.setValue(t);
+                }
+                case WEEK -> {
+                    fromPicker.setValue(startOfWeek(t, firstDay));
+                    toPicker.setValue(endOfWeek(t, firstDay));
+                }
+                case MONTH -> {
+                    fromPicker.setValue(t.with(TemporalAdjusters.firstDayOfMonth()));
+                    toPicker.setValue(t.with(TemporalAdjusters.lastDayOfMonth()));
+                }
+                default -> { }
+            }
+            applyingPreset[0] = false;
+        });
+        fromPicker.valueProperty().addListener((obs, o, n) -> {
+            if (!applyingPreset[0]) presetCombo.setValue(PresetRange.CUSTOM);
+        });
+        toPicker.valueProperty().addListener((obs, o, n) -> {
+            if (!applyingPreset[0]) presetCombo.setValue(PresetRange.CUSTOM);
+        });
+
+        Label periodNavLabel = new Label();
+        Button periodPrevBtn = new Button(i18n("filter.period.prev"));
+        Button periodNextBtn = new Button(i18n("filter.period.next"));
+        periodPrevBtn.setMinWidth(Region.USE_PREF_SIZE);
+        periodNextBtn.setMinWidth(Region.USE_PREF_SIZE);
+        HBox periodNavBox = new HBox(6, periodPrevBtn, periodNavLabel, periodNextBtn);
+        periodNavBox.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(periodNavLabel, Priority.ALWAYS);
+        Runnable updatePeriodNav = () -> updateViewPeriodNavLabel(periodNavLabel, periodNavBox, presetCombo.getValue(), fromPicker.getValue(), toPicker.getValue());
+        periodPrevBtn.setOnAction(e -> {
+            PresetRange p = presetCombo.getValue();
+            LocalDate from = fromPicker.getValue();
+            LocalDate to = toPicker.getValue();
+            if (p == null || from == null || to == null) return;
+            applyingPreset[0] = true;
+            if (p == PresetRange.DAY) {
+                fromPicker.setValue(from.plusDays(-1));
+                toPicker.setValue(to.plusDays(-1));
+            } else if (p == PresetRange.WEEK) {
+                fromPicker.setValue(from.plusWeeks(-1));
+                toPicker.setValue(to.plusWeeks(-1));
+            } else if (p == PresetRange.MONTH) {
+                fromPicker.setValue(from.plusMonths(-1));
+                toPicker.setValue(to.plusMonths(-1));
+            }
+            applyingPreset[0] = false;
+            updatePeriodNav.run();
+        });
+        periodNextBtn.setOnAction(e -> {
+            PresetRange p = presetCombo.getValue();
+            LocalDate from = fromPicker.getValue();
+            LocalDate to = toPicker.getValue();
+            if (p == null || from == null || to == null) return;
+            applyingPreset[0] = true;
+            if (p == PresetRange.DAY) {
+                fromPicker.setValue(from.plusDays(1));
+                toPicker.setValue(to.plusDays(1));
+            } else if (p == PresetRange.WEEK) {
+                fromPicker.setValue(from.plusWeeks(1));
+                toPicker.setValue(to.plusWeeks(1));
+            } else if (p == PresetRange.MONTH) {
+                fromPicker.setValue(from.plusMonths(1));
+                toPicker.setValue(to.plusMonths(1));
+            }
+            applyingPreset[0] = false;
+            updatePeriodNav.run();
+        });
+        presetCombo.valueProperty().addListener((obs, o, n) -> updatePeriodNav.run());
+        fromPicker.valueProperty().addListener((obs, o, n) -> updatePeriodNav.run());
+        toPicker.valueProperty().addListener((obs, o, n) -> updatePeriodNav.run());
+
+        presetCombo.setValue(PresetRange.MONTH);
+        initializing[0] = false;
+        updatePeriodNav.run();
+
+        VBox form = new VBox(10,
+            new Label(i18n("filter.customer.label")), customerCombo,
+            new Label(i18n("filter.project.label")), projectCombo,
+            new Label(i18n("filter.preset.label")), presetCombo,
+            periodNavBox,
+            new Label(i18n("filter.from.label")), fromPicker,
+            new Label(i18n("filter.to.label")), toPicker
+        );
+        form.setPadding(new Insets(20));
+
+        Alert dialog = new Alert(AlertType.NONE);
+        dialog.setTitle(i18n("timesheet.export.dialog.title"));
+        dialog.setHeaderText(i18n("timesheet.export.dialog.header"));
+        dialog.getDialogPane().setContent(form);
+        ButtonType ok = new ButtonType(i18n("button.save"), ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(ok, ButtonType.CANCEL);
+        addEscapeToClose(dialog);
+        dialog.initOwner(primaryStage);
+
+        Optional<ButtonType> result = dialog.showAndWait();
+        if (result.isEmpty() || result.get() != ok) {
+            return null;
+        }
+        Customer c = customerCombo.getValue();
+        Project p = projectCombo.getValue();
+        if (c == null || p == null) {
+            showInfo(p == null ? i18n("timesheet.export.customer.has.no.projects") : i18n("timesheet.customer.required"));
+            return null;
+        }
+        return new TimesheetExportChoice(c, p, fromPicker.getValue(), toPicker.getValue());
     }
 
     private Properties buildTimesheetProperties(Customer customer) {
