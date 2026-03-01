@@ -98,4 +98,8 @@ Solange ein Reminder- oder Add-Activity-Dialog (oder Bearbeiten-Dialog) offen is
 # Bug fixes
 
 1. Laut docs/Rules.md soll die Ende-Zeit im Reminder-/Add-Activity-Dialog bei jedem Reminder-Intervall automatisch weitergesetzt werden, aber nie über das Kernzeitende (Reminder-Fenster-Ende) hinaus.
-In der Implementierung wurde die Ende-Zeit nur auf „jetzt“ (gerundet auf das Zeitraster) gesetzt, ohne Begrenzung auf das Kernzeitende. Dadurch konnte „Bis“ z.B. auf 17:15, 17:30 usw. laufen, wenn der Dialog nach 17:00 offen blieb.
+**Ursache**: In der Implementierung wurde die Ende-Zeit nur auf „jetzt“ (gerundet auf das Zeitraster) gesetzt, ohne Begrenzung auf das Kernzeitende. Dadurch konnte „Bis“ z.B. auf 17:15, 17:30 usw. laufen, wenn der Dialog nach 17:00 offen blieb.
+
+1. Wenn ich die Farben der Kunden ändere, erscheinen diese erst beim Neustart im Kalender
+**Ursache**: Beim Speichern im Management-Dialog wurde nur saveData() ausgeführt. Die Kalenderfarben werden aber in syncAllCalendarsFromActivities() aus den Kundendaten gelesen und per CSS gesetzt. Diese Methode lief bisher nur bei Änderungen der Activity-Liste oder beim Laden der Daten – nicht nach dem Speichern geänderter Kundeneinstellungen (z. B. Farben).
+**Änderung**: Am Ende von saveData() wird jetzt syncAllCalendarsFromActivities() aufgerufen. Nach jedem Speichern (inkl. „Speichern“ im Management-Dialog) wird der Kalender damit neu aufgebaut und die aktuellen Kundenfarben (Palette/Index) werden sofort angezeigt – ohne Neustart.

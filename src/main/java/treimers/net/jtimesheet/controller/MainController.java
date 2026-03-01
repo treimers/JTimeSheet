@@ -3805,6 +3805,7 @@ public class MainController {
                 Files.createDirectories(parent);
             }
             storageService.save(dataPath, data);
+            syncAllCalendarsFromActivities();
         } catch (IOException exception) {
             showInfo(i18n("data.save.error", exception.getMessage()));
         }
