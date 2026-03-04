@@ -40,6 +40,7 @@ import com.calendarfx.model.Entry;
 import com.calendarfx.model.Interval;
 import com.calendarfx.view.CalendarView;
 import com.calendarfx.view.CalendarView.Page;
+import com.calendarfx.view.DateControl;
 import com.calendarfx.view.DayView;
 import com.calendarfx.view.MonthView;
 import com.calendarfx.view.WeekDayView;
@@ -103,6 +104,8 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.util.Callback;
+import org.controlsfx.control.PopOver;
 import treimers.net.jtimesheet.model.Activity;
 import treimers.net.jtimesheet.view.TooltipDayEntryView;
 import treimers.net.jtimesheet.view.TooltipMonthEntryView;
@@ -237,6 +240,8 @@ public class MainController {
     private static final int CALENDAR_TAB_INDEX = 1;
     /** URL of the user calendar color override stylesheet, or null if none. */
     private String calendarOverrideStylesheetUrl;
+    /** Reference to the CalendarView for applying color stylesheet to list/search (they may use this node's stylesheets). */
+    private CalendarView calendarViewRef;
     private CalendarSource calendarSource;
     private Map<String, Calendar<Activity>> calendarsByCustomerProject = new HashMap<>();
     private final List<Entry<Activity>> calendarEntries = new ArrayList<>();
@@ -786,6 +791,7 @@ public class MainController {
         Platform.runLater(() -> {
             Node cal = createCalendarContent();
             calendarViewNode = cal;
+            calendarViewRef = cal instanceof CalendarView cv ? cv : null;
             if (calendarTab != null) {
                 calendarTab.setContent(cal);
             }
@@ -802,6 +808,7 @@ public class MainController {
         calendarView.setWeekFields(WeekFields.of(settings.getFirstDayOfWeek(), 1));
         restoreCalendarPreferences(calendarView);
         calendarView.selectedPageProperty().addListener((obs, oldPage, newPage) -> saveCalendarPagePreference(newPage));
+        wrapEntryDetailsPopOverToApplyCalendarColors(calendarView);
         Thread updateTimeThread = new Thread("Calendar: Update Time") {
             @Override
             public void run() {
@@ -977,12 +984,28 @@ public class MainController {
         if (saved.isEmpty()) return;
     }
 
+    /** Wraps the entry details popover content callback so the popover (opened on double-click) gets our calendar color stylesheet. */
+    private void wrapEntryDetailsPopOverToApplyCalendarColors(CalendarView calendarView) {
+        Callback<DateControl.EntryDetailsPopOverContentParameter, Node> defaultCallback =
+            calendarView.getEntryDetailsPopOverContentCallback();
+        calendarView.setEntryDetailsPopOverContentCallback(param -> {
+            Node content = defaultCallback != null ? defaultCallback.call(param) : null;
+            if (param != null && calendarOverrideStylesheetUrl != null) {
+                PopOver popOver = param.getPopOver();
+                if (popOver != null && popOver.getRoot() != null) {
+                    popOver.getRoot().getStylesheets().add(calendarOverrideStylesheetUrl);
+                }
+            }
+            return content;
+        });
+    }
+
     /**
-     * Applies calendar entry colors via a stylesheet override.
-     * We add a custom style class to each Entry (jtimesheet-entry-color-0 … 6); the EntryViewBase
-     * copies the entry's style classes to the view node. We then inject CSS that sets background,
-     * border, and label text color for each class so our customer colors are applied regardless of
-     * CalendarFX's variable-based styling.
+     * Applies calendar colors via a stylesheet override.
+     * CalendarFX uses CSS variables -style1-color … -style7-color for entries, the calendar list
+     * (button top left), and search/popover. We override these variables on .root so that the
+     * list and search use our customer colors. We also add per-entry classes (jtimesheet-entry-color-0 … 6)
+     * so entry appearance is fully controlled regardless of CalendarFX defaults.
      * @param hexColors list of 7 hex colors (style 1–7), or empty to remove override
      */
     private void applyCalendarColorPalette(Scene scene, List<String> hexColors) {
@@ -992,12 +1015,33 @@ public class MainController {
         var stylesheets = scene.getStylesheets();
         if (calendarOverrideStylesheetUrl != null) {
             stylesheets.remove(calendarOverrideStylesheetUrl);
+            if (calendarViewRef != null) {
+                calendarViewRef.getStylesheets().remove(calendarOverrideStylesheetUrl);
+            }
             calendarOverrideStylesheetUrl = null;
         }
         if (hexColors == null || hexColors.size() < 7) {
             return;
         }
         StringBuilder css = new StringBuilder();
+        css.append("/* Override CalendarFX -style1-color … -style7-color so list, search and entries use customer colors */\n");
+        css.append(".root, * {\n");
+        for (int i = 0; i < 7; i++) {
+            css.append("  -style").append(i + 1).append("-color: ").append(hexColors.get(i)).append(";\n");
+        }
+        css.append("}\n");
+        css.append(".calendar-view, .calendar-view * {\n");
+        for (int i = 0; i < 7; i++) {
+            css.append("  -style").append(i + 1).append("-color: ").append(hexColors.get(i)).append(";\n");
+        }
+        css.append("}\n\n");
+        /* Search result view adds calendar.getStyle() + "-icon" to the color circle (e.g. STYLE1-icon); set fill/stroke so the circle uses our palette */
+        for (int i = 0; i < 7; i++) {
+            String hex = hexColors.get(i);
+            int n = i + 1;
+            css.append(".STYLE").append(n).append("-icon, .style").append(n).append("-icon { -fx-fill: ").append(hex).append("; -fx-stroke: ").append(hex).append("; }\n");
+        }
+        css.append("\n");
         for (int i = 0; i < 7; i++) {
             String hex = hexColors.get(i);
             String cls = "jtimesheet-entry-color-" + i;
@@ -1014,6 +1058,9 @@ public class MainController {
             Files.writeString(tmp, css.toString());
             String url = tmp.toUri().toASCIIString();
             stylesheets.add(url);
+            if (calendarViewRef != null) {
+                calendarViewRef.getStylesheets().add(url);
+            }
             calendarOverrideStylesheetUrl = url;
         } catch (IOException ignored) {
             // Keep previous or default colors
