@@ -74,9 +74,12 @@ public final class ReminderSuggestionLogic {
         }
 
         String projectId = contextProjectId;
-        List<Activity> todays = getTodaysActivities(activities, today, customerId, projectId);
-        Activity containingNow = findActivityContainingNow(todays, now);
-        LocalDateTime lastEndBeforeNow = findLastEndBeforeNow(todays, now);
+        // Aktivitäten des aktuellen Kunden/Projekts für Defaults und "inside activity"-Erkennung.
+        List<Activity> todaysForContext = getTodaysActivities(activities, today, customerId, projectId);
+        Activity containingNow = findActivityContainingNow(todaysForContext, now);
+        // Startzeit des Vorschlags: immer Ende der letzten Aktivität aller Kunden (Rules.md Szenarien 3–5, 4 (Task)).
+        List<Activity> todaysAll = getTodaysActivities(activities, today, null, null);
+        LocalDateTime lastEndBeforeNow = findLastEndBeforeNow(todaysAll, now);
 
         // Carry-over: when same customer/project as last activity, use its end as start for next suggestion
         if (lastActivity != null && customerId.equals(lastActivity.getCustomerId())

@@ -418,6 +418,34 @@
         "taskId": "T1",
         "range": ["2025-02-03T10:00", "2025-02-03T11:00"]
       }
+    },
+    {
+      "description": "Szenario 3 (global): Letzte Aktivität eines anderen Kunden bestimmt Startzeit (Ende letzter Aktivität aller Kunden)",
+      "setup": {
+        "customers": [
+          { "id": "C1", "name": "C1", "projects": [ { "id": "P1", "name": "P1", "tasks": [ { "id": "T1", "name": "T1" } ] } ] },
+          { "id": "C2", "name": "C2", "projects": [ { "id": "P2", "name": "P2", "tasks": [ { "id": "T2", "name": "T2" } ] } ] }
+        ],
+        "activities": [
+          { "customerId": "C1", "projectId": "P1", "taskId": "T1", "from": "2025-02-03T09:00", "to": "2025-02-03T10:00" },
+          { "customerId": "C2", "projectId": "P2", "taskId": "T2", "from": "2025-02-03T10:30", "to": "2025-02-03T11:00" }
+        ]
+      },
+      "input": {
+        "now": "2025-02-03T12:00",
+        "lastActivityIndex": null,
+        "contextCustomerId": "C1",
+        "contextProjectId": null,
+        "fromReminder": false
+      },
+      "expected": {
+        "blockedForReminder": false,
+        "suggestionType": "GAP",
+        "customerId": "C1",
+        "projectId": "P1",
+        "taskId": "T1",
+        "range": ["2025-02-03T11:00", "2025-02-03T12:00"]
+      }
     }
   ]
 }
