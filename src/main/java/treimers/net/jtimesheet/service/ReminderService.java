@@ -1,23 +1,27 @@
 package treimers.net.jtimesheet.service;
 
-import static javafx.util.Duration.millis;
-
 import java.time.LocalDateTime;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-import javafx.animation.PauseTransition;
 import treimers.net.jtimesheet.model.AppSettings;
 
 /**
  * Runs a timer every full minute and calls a callback. The callback should use
  * {@link #isReminderDue(LocalDateTime, AppSettings)} to decide whether to show the reminder dialog.
+ * Uses a background scheduler (not JavaFX animation) so the timer keeps firing when the app
+ * is in the background on macOS (unless the process is suspended by App Nap).
  * For tests, call {@link #tick(LocalDateTime)} with a fixed time instead of waiting for the timer.
  */
 public class ReminderService {
 
-    private static final long TICK_INTERVAL_MS = 60_000L;
+    private static final long TICK_INTERVAL_SECONDS = 60L;
 
-    private PauseTransition minuteTimer;
+    private ScheduledExecutorService scheduler;
+    private ScheduledFuture<?> scheduledFuture;
     private Consumer<LocalDateTime> onTick;
 
     /**
@@ -27,16 +31,20 @@ public class ReminderService {
     public void start(AppSettings settings, Consumer<LocalDateTime> onTick) {
         stop();
         this.onTick = onTick;
-        minuteTimer = new PauseTransition(millis(TICK_INTERVAL_MS));
-        minuteTimer.setOnFinished(event -> {
-            if (this.onTick != null) {
-                this.onTick.accept(LocalDateTime.now());
-            }
-            if (minuteTimer != null) {
-                minuteTimer.playFromStart();
-            }
+        scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "ReminderService-timer");
+            t.setDaemon(true);
+            return t;
         });
-        minuteTimer.play();
+        scheduledFuture = scheduler.scheduleAtFixedRate(
+                () -> {
+                    if (this.onTick != null) {
+                        this.onTick.accept(LocalDateTime.now());
+                    }
+                },
+                TICK_INTERVAL_SECONDS,
+                TICK_INTERVAL_SECONDS,
+                TimeUnit.SECONDS);
     }
 
     /**
@@ -50,9 +58,13 @@ public class ReminderService {
     }
 
     public void stop() {
-        if (minuteTimer != null) {
-            minuteTimer.stop();
-            minuteTimer = null;
+        if (scheduledFuture != null) {
+            scheduledFuture.cancel(false);
+            scheduledFuture = null;
+        }
+        if (scheduler != null) {
+            scheduler.shutdown();
+            scheduler = null;
         }
         onTick = null;
     }

@@ -147,6 +147,7 @@ public class MainController {
     private static final Color TOOLBAR_ICON_COLOR = Color.web("#2563eb");
     private static final Color TOOLBAR_ICON_HOVER_COLOR = Color.web("#1d4ed8");
     private static final String TOOLBAR_BUTTON_HOVER_STYLE = "-fx-background-color: rgba(37, 99, 235, 0.12);";
+    private static final String REMINDER_DEBUG_PREFIX = "[ReminderDebug] ";
     private static final String TOOLBAR_BUTTON_NORMAL_STYLE = "";
     private final ObjectMapper objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
     private final AppSettings settings;
@@ -258,6 +259,10 @@ public class MainController {
         }
     }
     private HostServices hostServices;
+    private boolean reminderDebug;
+    private final java.util.List<String> reminderDebugLog = new java.util.ArrayList<>();
+    private Dialog<Void> reminderDebugDialog;
+    private TextArea reminderDebugTextArea;
 
     public MainController() {
         this(new AppSettings());
@@ -337,6 +342,15 @@ public class MainController {
         MainView view = new MainView(menuBar, toolBar, activityPanel);
 
         Scene scene = new Scene(view.getRoot(), 900, 520);
+        scene.addEventHandler(KeyEvent.KEY_PRESSED, e -> {
+            if (new KeyCodeCombination(KeyCode.F12).match(e)) {
+                setReminderDebug(!reminderDebug);
+                e.consume();
+            } else if (new KeyCodeCombination(KeyCode.F12, KeyCombination.SHIFT_DOWN).match(e)) {
+                openReminderDebugDialog();
+                e.consume();
+            }
+        });
         // Ensure CalendarFX library styles (calendar.css with -style1-color … -style7-color) are applied.
         URL calendarFxCss = CalendarView.class.getResource("calendar.css");
         if (calendarFxCss != null) {
@@ -2411,12 +2425,33 @@ public class MainController {
      */
     void onReminderFired(LocalDateTime now) {
         if (activityDialogOpen) {
+            if (reminderDebug) {
+                debugReminder("No reminder at %s: activity dialog is currently open.", now);
+            }
             return;
         }
-        if (!reminderService.isReminderDue(now, settings)) {
+        boolean due = reminderService.isReminderDue(now, settings);
+        if (!due) {
+            if (reminderDebug) {
+                boolean withinWindow = treimers.net.jtimesheet.service.ReminderWindowRules.isWithinWindow(now, settings);
+                int interval = treimers.net.jtimesheet.model.AppSettings.normalizeReminderIntervalMinutes(
+                        settings.getReminderIntervalMinutes());
+                int minute = now.getMinute();
+                boolean onBoundary = (minute % interval) == 0;
+                debugReminder(
+                        "No reminder at %s: isReminderDue=false (withinWindow=%s, intervalMinutes=%d, minute=%02d, onIntervalBoundary=%s).",
+                        now,
+                        withinWindow,
+                        interval,
+                        minute,
+                        onBoundary);
+            }
             return;
         }
         if (ReminderExceptionRules.shouldSuppressReminder(activities, customers, now)) {
+            if (reminderDebug) {
+                debugReminder("No reminder at %s: suppressed by ReminderExceptionRules (activities=%d).", now, activities.size());
+            }
             return;
         }
         ReminderSuggestion s = reminderSuggestionLogic.compute(
@@ -2430,6 +2465,11 @@ public class MainController {
                 true,
                 programStartTime);
         if (s.isBlockedForReminder()) {
+            if (reminderDebug) {
+                debugReminder(
+                        "No reminder at %s: suggestion is blockedForReminder (inside activity ending in the future).",
+                        now);
+            }
             return;
         }
         LocalDateTime[] range;
@@ -2443,7 +2483,79 @@ public class MainController {
                 lastShownGapRange = null;
             }
         }
+        if (reminderDebug) {
+            debugReminder(
+                    "Showing reminder dialog at %s: range=%s – %s, suggestionType=%s, lastShownGapRange=%s.",
+                    now,
+                    range[0],
+                    range[1],
+                    s.getSuggestionType(),
+                    lastShownGapRange != null ? (lastShownGapRange[0] + " – " + lastShownGapRange[1]) : "null");
+        }
         openAddOrPromptActivityDialogWithSuggestion(i18n("activity.add.title"), now, s, range);
+    }
+
+    private void debugReminder(String format, Object... args) {
+        String line = REMINDER_DEBUG_PREFIX + String.format(format, args);
+        reminderDebugLog.add(line);
+        updateReminderDebugTextArea();
+    }
+
+    private void debugReminderInitialSettings() {
+        int interval = treimers.net.jtimesheet.model.AppSettings.normalizeReminderIntervalMinutes(
+                settings.getReminderIntervalMinutes());
+        debugReminder(
+                "Enabled. Interval=%d minutes, window=%s–%s, weekdays=%s.",
+                interval,
+                settings.getReminderStartTime(),
+                settings.getReminderEndTime(),
+                settings.getReminderWeekdays());
+    }
+
+    private void setReminderDebug(boolean enabled) {
+        this.reminderDebug = enabled;
+        if (reminderDebug) {
+            debugReminderInitialSettings();
+        } else {
+            debugReminder("Disabled.");
+        }
+        if (reminderDebugDialog != null) {
+            reminderDebugDialog.setHeaderText("Interner Reminder-Debug-Status (aktiv: " + reminderDebug + ")");
+        }
+    }
+
+    private void openReminderDebugDialog() {
+        if (reminderDebugDialog == null) {
+            reminderDebugDialog = new Dialog<>();
+            reminderDebugDialog.setTitle("Reminder-Debug-Log");
+            reminderDebugDialog.setHeaderText("Interner Reminder-Debug-Status (aktiv: " + reminderDebug + ")");
+            reminderDebugTextArea = new TextArea();
+            reminderDebugTextArea.setEditable(false);
+            reminderDebugTextArea.setWrapText(false);
+            reminderDebugTextArea.setPrefColumnCount(80);
+            reminderDebugTextArea.setPrefRowCount(20);
+            reminderDebugDialog.getDialogPane().setContent(reminderDebugTextArea);
+            reminderDebugDialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+            reminderDebugDialog.initOwner(primaryStage);
+            reminderDebugDialog.initModality(Modality.WINDOW_MODAL);
+            reminderDebugDialog.getDialogPane().addEventFilter(KeyEvent.KEY_PRESSED, e -> {
+                if (new KeyCodeCombination(KeyCode.F12).match(e)) {
+                    setReminderDebug(!reminderDebug);
+                    e.consume();
+                }
+            });
+        }
+        updateReminderDebugTextArea();
+        if (!reminderDebugDialog.isShowing()) {
+            reminderDebugDialog.show();
+        }
+    }
+
+    private void updateReminderDebugTextArea() {
+        if (reminderDebugTextArea != null) {
+            reminderDebugTextArea.setText(String.join("\n", reminderDebugLog));
+            reminderDebugTextArea.positionCaret(reminderDebugTextArea.getText().length());
+        }
     }
 
     /**
