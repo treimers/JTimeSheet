@@ -4,3 +4,5 @@
 *.properties
 target/
 jtimesheet.json
+docs/Rules.md
+rules/
