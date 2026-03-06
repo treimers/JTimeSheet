@@ -1,5 +1,8 @@
 name: Build and Release JTimeSheet
 
+permissions:
+  contents: write
+
 on:
   push:
     branches:
@@ -101,13 +104,21 @@ jobs:
         id: get_version
         run: echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_ENV
 
+      - name: Configure git for push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/treimers/JTimeSheet.git"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Fetch tags
         run: git fetch --tags
 
       - name: Create or update tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -f "v${{ env.VERSION }}"
           git push -f origin "v${{ env.VERSION }}"
 
