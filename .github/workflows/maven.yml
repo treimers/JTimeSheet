@@ -122,21 +122,21 @@ jobs:
           git tag -f "v${{ env.VERSION }}"
           git push -f origin "v${{ env.VERSION }}"
 
-    - name: Rename artifacts for unique asset names
-      run: |
-        mkdir -p ./artifacts/release
-        # Linux
-        find ./artifacts/linux -type f | while read f; do
-          cp "$f" "./artifacts/release/$(basename "${f%.*}")-linux.${f##*.}"
-        done
-        # Windows
-        find ./artifacts/windows -type f | while read f; do
-          cp "$f" "./artifacts/release/$(basename "${f%.*}")-windows.${f##*.}"
-        done
-        # macOS
-        find ./artifacts/macos -type f | while read f; do
-          cp "$f" "./artifacts/release/$(basename "${f%.*}")-macos.${f##*.}"
-        done
+      - name: Rename artifacts for unique asset names
+        run: |
+          mkdir -p ./artifacts/release
+          # Linux
+          find ./artifacts/linux -type f | while read f; do
+            cp "$f" "./artifacts/release/$(basename "${f%.*}")-linux.${f##*.}"
+          done
+          # Windows
+          find ./artifacts/windows -type f | while read f; do
+            cp "$f" "./artifacts/release/$(basename "${f%.*}")-windows.${f##*.}"
+          done
+          # macOS
+          find ./artifacts/macos -type f | while read f; do
+            cp "$f" "./artifacts/release/$(basename "${f%.*}")-macos.${f##*.}"
+          done
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
