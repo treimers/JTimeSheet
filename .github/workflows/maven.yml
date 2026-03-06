@@ -52,7 +52,7 @@ jobs:
           path: |
             target/deploy/windows/**
 
-  build-macos:
+  build-macos-arm64:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,18 +64,36 @@ jobs:
           cache: maven
       - name: Build with Maven
         run: mvn -B clean package -DskipTests
-      - name: Extract version from pom.xml
-        id: get_version
-        run: echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_ENV
-      - name: Upload macOS artifacts
+      - name: Upload macOS ARM64 artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos
+          name: macos-arm64
           path: |
+            target/deploy/osx-arm64/**
+            target/deploy/osx/**
+
+  build-macos-intel:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Build with Maven
+        run: mvn -B clean package -DskipTests
+      - name: Upload macOS Intel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-intel
+          path: |
+            target/deploy/osx-x86_64/**
             target/deploy/osx/**
 
   create-release:
-    needs: [build-linux, build-windows, build-macos]
+    needs: [build-linux, build-windows, build-macos-arm64, build-macos-intel]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -94,16 +112,15 @@ jobs:
       - name: Rename artifacts for unique asset names
         run: |
           mkdir -p ./artifacts/release
-          for os in linux windows macos; do
-            find ./artifacts/$os -type f | while read f; do
-              filename=$(basename "$f")
-              name="${filename%.*}"
-              ext="${filename##*.}"
-              if [ "$name" = "$ext" ]; then
-                cp "$f" "./artifacts/release/${name}-${os}"
-              else
+          # Only copy known distributable formats with JTimeSheet in the name
+          for os in linux windows macos-arm64 macos-intel; do
+            [ ! -d "./artifacts/$os" ] && continue
+            for ext in zip dmg pkg exe deb rpm msi; do
+              find ./artifacts/$os -type f -name "*.$ext" -path "*JTimeSheet*" | while read -r f; do
+                filename=$(basename "$f")
+                name="${filename%.*}"
                 cp "$f" "./artifacts/release/${name}-${os}.${ext}"
-              fi
+              done
             done
           done
 
@@ -111,8 +128,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          sleep 5
-          gh release create "v${{ env.VERSION }}" ./artifacts/release/* \
+          release_files=()
+          for f in ./artifacts/release/*; do
+            [ -f "$f" ] && [[ "$(basename "$f")" == *JTimeSheet* ]] && release_files+=( "$f" )
+          done
+          if [ ${#release_files[@]} -eq 0 ]; then
+            echo "No release artifacts found in ./artifacts/release/"
+            exit 1
+          fi
+          echo "Uploading ${#release_files[@]} asset(s): ${release_files[*]}"
+          gh release create "v${{ env.VERSION }}" "${release_files[@]}" \
             --title "Release v${{ env.VERSION }}" \
             --draft=false \
             --repo treimers/JTimeSheet
