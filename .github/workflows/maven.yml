@@ -81,92 +81,40 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Download Linux artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: linux
-          path: ./artifacts/linux
-
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: windows
-          path: ./artifacts/windows
-
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: macos
-          path: ./artifacts/macos
+          path: ./artifacts
 
       - name: Extract version from pom.xml
         id: get_version
         run: echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_ENV
 
-      - name: Configure git for push
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/treimers/JTimeSheet.git"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Fetch tags
-        run: git fetch --tags
-
-      - name: Create or update tag
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git tag -f "v${{ env.VERSION }}"
-          git push -f origin "v${{ env.VERSION }}"
-
       - name: Rename artifacts for unique asset names
         run: |
           mkdir -p ./artifacts/release
-          # Linux
-          find ./artifacts/linux -type f | while read f; do
-            filename=$(basename "$f")
-            name="${filename%.*}"
-            ext="${filename##*.}"
-            if [ "$name" = "$ext" ]; then
-              # No file extension
-              cp "$f" "./artifacts/release/${name}-linux"
-            else
-              cp "$f" "./artifacts/release/${name}-linux.${ext}"
-            fi
-          done
-          # Windows
-          find ./artifacts/windows -type f | while read f; do
-            filename=$(basename "$f")
-            name="${filename%.*}"
-            ext="${filename##*.}"
-            if [ "$name" = "$ext" ]; then
-              cp "$f" "./artifacts/release/${name}-windows"
-            else
-              cp "$f" "./artifacts/release/${name}-windows.${ext}"
-            fi
-          done
-          # macOS
-          find ./artifacts/macos -type f | while read f; do
-            filename=$(basename "$f")
-            name="${filename%.*}"
-            ext="${filename##*.}"
-            if [ "$name" = "$ext" ]; then
-              cp "$f" "./artifacts/release/${name}-macos"
-            else
-              cp "$f" "./artifacts/release/${name}-macos.${ext}"
-            fi
+          for os in linux windows macos; do
+            find ./artifacts/$os -type f | while read f; do
+              filename=$(basename "$f")
+              name="${filename%.*}"
+              ext="${filename##*.}"
+              if [ "$name" = "$ext" ]; then
+                cp "$f" "./artifacts/release/${name}-${os}"
+              else
+                cp "$f" "./artifacts/release/${name}-${os}.${ext}"
+              fi
+            done
           done
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: false
-          prerelease: false
-          tag_name: "v${{ env.VERSION }}"
-          name: "Release v${{ env.VERSION }}"
-          files: ./artifacts/release/*
+      - name: Create GitHub Release with gh CLI
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sleep 5
+          gh release create "v${{ env.VERSION }}" ./artifacts/release/* \
+            --title "Release v${{ env.VERSION }}" \
+            --draft=false \
+            --repo treimers/JTimeSheet
