@@ -127,15 +127,37 @@ jobs:
           mkdir -p ./artifacts/release
           # Linux
           find ./artifacts/linux -type f | while read f; do
-            cp "$f" "./artifacts/release/$(basename "${f%.*}")-linux.${f##*.}"
+            filename=$(basename "$f")
+            name="${filename%.*}"
+            ext="${filename##*.}"
+            if [ "$name" = "$ext" ]; then
+              # No file extension
+              cp "$f" "./artifacts/release/${name}-linux"
+            else
+              cp "$f" "./artifacts/release/${name}-linux.${ext}"
+            fi
           done
           # Windows
           find ./artifacts/windows -type f | while read f; do
-            cp "$f" "./artifacts/release/$(basename "${f%.*}")-windows.${f##*.}"
+            filename=$(basename "$f")
+            name="${filename%.*}"
+            ext="${filename##*.}"
+            if [ "$name" = "$ext" ]; then
+              cp "$f" "./artifacts/release/${name}-windows"
+            else
+              cp "$f" "./artifacts/release/${name}-windows.${ext}"
+            fi
           done
           # macOS
           find ./artifacts/macos -type f | while read f; do
-            cp "$f" "./artifacts/release/$(basename "${f%.*}")-macos.${f##*.}"
+            filename=$(basename "$f")
+            name="${filename%.*}"
+            ext="${filename##*.}"
+            if [ "$name" = "$ext" ]; then
+              cp "$f" "./artifacts/release/${name}-macos"
+            else
+              cp "$f" "./artifacts/release/${name}-macos.${ext}"
+            fi
           done
 
       - name: Create GitHub Release
