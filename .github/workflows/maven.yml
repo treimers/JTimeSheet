@@ -206,10 +206,8 @@ jobs:
           copy_if_exists ./artifacts/windows "JTimeSheet_*.exe" "JTimeSheet_${VERSION}-windows-x64.exe"
           copy_if_exists ./artifacts/windows "JTimeSheet_*.msi" "JTimeSheet_${VERSION}-windows-x64.msi"
           echo ""
-          echo "=== Inhalt artifacts/ vor Copy ==="
-          ls -la ./artifacts/
           echo "=== Inhalt artifacts/release/ nach Copy ==="
-          ls -la ./artifacts/release/
+          ls -Rla ./artifacts/release/
 
       - name: Create GitHub Release with gh CLI
         env:
