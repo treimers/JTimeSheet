@@ -168,6 +168,20 @@ jobs:
         id: get_version
         run: echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_ENV
 
+      - name: Debug – Artefakt-Struktur
+        run: |
+          echo "=== PWD ==="
+          pwd
+          echo ""
+          echo "=== All Artifacts ==="
+          find ./artifacts -type f  2>/dev/null || echo "Keine gefunden"
+          echo ""
+          echo "=== Find-Test JTimeSheet_*.exe ==="
+          find ./artifacts/windows -type f -name "JTimeSheet_*.exe" 2>/dev/null || echo "Keine gefunden"
+          echo ""
+          echo "=== Find-Test JTimeSheet_*.msi ==="
+          find ./artifacts/windows -type f -name "JTimeSheet_*.msi" 2>/dev/null || echo "Keine gefunden"
+
       - name: Copy release artifacts (whitelist only)
         run: |
           mkdir -p ./artifacts/release
@@ -191,6 +205,11 @@ jobs:
           copy_if_exists ./artifacts/windows "JTimeSheet-*-windows.zip" "JTimeSheet-${VERSION}-windows-x64.zip"
           copy_if_exists ./artifacts/windows "JTimeSheet_*.exe" "JTimeSheet_${VERSION}-windows-x64.exe"
           copy_if_exists ./artifacts/windows "JTimeSheet_*.msi" "JTimeSheet_${VERSION}-windows-x64.msi"
+          echo ""
+          echo "=== Inhalt artifacts/ vor Copy ==="
+          ls -la ./artifacts/
+          echo "=== Inhalt artifacts/release/ nach Copy ==="
+          ls -la ./artifacts/release/
 
       - name: Create GitHub Release with gh CLI
         env:
