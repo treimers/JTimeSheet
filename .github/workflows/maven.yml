@@ -196,10 +196,6 @@ jobs:
           cp_if "${ARTIFACTS}/windows/JTimeSheet_${VERSION}.exe" "JTimeSheet_${VERSION}-windows-x64.exe"
           cp_if "${ARTIFACTS}/windows/JTimeSheet_${VERSION}.msi" "JTimeSheet_${VERSION}-windows-x64.msi"
 
-
-      - name: Debug – Release-Verzeichnis
-        run: ls -la ./artifacts/release/
-
       - name: Create GitHub Release with gh CLI
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
