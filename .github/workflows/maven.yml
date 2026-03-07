@@ -168,11 +168,6 @@ jobs:
         id: get_version
         run: echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_ENV
 
-      - name: Debug – Windows-Artefakte prüfen
-        run: |
-          echo "=== Artifacts ==="
-          find ./artifacts/ 2>/dev/null
-
       - name: Copy release artifacts (whitelist only)
         run: |
           mkdir -p ./artifacts/release
@@ -192,13 +187,10 @@ jobs:
           copy_if_exists ./artifacts/macos-intel "JTimeSheet-*-mac.zip" "JTimeSheet-${VERSION}-macos-x64.zip"
           copy_if_exists ./artifacts/macos-intel "JTimeSheet_*.dmg" "JTimeSheet_${VERSION}-macos-x64.dmg"
           copy_if_exists ./artifacts/macos-intel "JTimeSheet_*.pkg" "JTimeSheet_${VERSION}-macos-x64.pkg"
-          # Windows: Installer (nicht JTimeSheet-windows.exe Launcher)
+          # Windows: JTimeSheet_1.0.exe, JTimeSheet_1.0.msi (nicht JTimeSheet-windows.exe Launcher)
           copy_if_exists ./artifacts/windows "JTimeSheet-*-windows.zip" "JTimeSheet-${VERSION}-windows-x64.zip"
-          # EXE: JTimeSheet_1.0.exe oder JTimeSheet-1.0-windows.exe; Launcher JTimeSheet-windows.exe ausschließen
-          src_exe=$(find ./artifacts/windows -type f \( -name "JTimeSheet_*-windows.exe" -o -name "JTimeSheet_*.exe" -o \( -name "JTimeSheet-*-windows.exe" ! -name "JTimeSheet-windows.exe" \) \) 2>/dev/null | head -1)
-          if [ -n "$src_exe" ]; then cp "$src_exe" "./artifacts/release/JTimeSheet_${VERSION}-windows-x64.exe"; fi
+          copy_if_exists ./artifacts/windows "JTimeSheet_*.exe" "JTimeSheet_${VERSION}-windows-x64.exe"
           copy_if_exists ./artifacts/windows "JTimeSheet_*.msi" "JTimeSheet_${VERSION}-windows-x64.msi"
-          copy_if_exists ./artifacts/windows "JTimeSheet-*-windows.msi" "JTimeSheet_${VERSION}-windows-x64.msi"
 
       - name: Create GitHub Release with gh CLI
         env:
