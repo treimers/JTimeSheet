@@ -174,7 +174,7 @@ jobs:
           VERSION="${{ env.VERSION }}"
           copy_if_exists() {
             src=$(find "$1" -type f -name "$2" 2>/dev/null | head -1)
-            [ -n "$src" ] && cp "$src" "./artifacts/release/$3"
+            if [ -n "$src" ]; then cp "$src" "./artifacts/release/$3"; fi
           }
           # Linux: zip, deb, rpm
           copy_if_exists ./artifacts/linux "JTimeSheet-*-linux.zip" "JTimeSheet-${VERSION}-linux-linux.zip"
