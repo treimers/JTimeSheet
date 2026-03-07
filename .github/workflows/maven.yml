@@ -165,22 +165,6 @@ jobs:
         id: get_version
         run: echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_ENV
 
-      - name: Debug – Artefakt-Struktur
-        run: |
-          echo "=== Workspace: ${{ github.workspace }} ==="
-          echo "=== PWD: $(pwd) ==="
-          echo ""
-          echo "=== Vollständige Verzeichnisstruktur ==="
-          ls -Rla ./artifacts 2>/dev/null || echo "Nicht gefunden"
-          echo ""
-          echo "=== Pfade der Release-Artefakte (find) ==="
-          VERSION="${{ env.VERSION }}"
-          find ./artifacts -type f \( \
-            -name "JTimeSheet-${VERSION}-linux.zip" -o -name "JTimeSheet_${VERSION}.deb" -o -name "JTimeSheet_${VERSION}.rpm" -o \
-            -name "JTimeSheet-${VERSION}-mac.zip" -o -name "JTimeSheet_${VERSION}.dmg" -o -name "JTimeSheet_${VERSION}.pkg" -o \
-            -name "JTimeSheet-${VERSION}-windows.zip" -o -name "JTimeSheet_${VERSION}.exe" -o -name "JTimeSheet_${VERSION}.msi" \
-          \) -print 2>/dev/null
-
       - name: Copy release artifacts (whitelist only)
         run: |
           ARTIFACTS="${{ github.workspace }}/artifacts"
@@ -260,6 +244,7 @@ jobs:
           ### Windows
           - **ZIP** – portable archive
           - **MSI** – installer
+          - **EXE** – installer
 
           ### Source code
           Automatically generated archives are available below.
