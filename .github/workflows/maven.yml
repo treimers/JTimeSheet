@@ -170,8 +170,8 @@ jobs:
 
       - name: Debug – Windows-Artefakte prüfen
         run: |
-          echo "=== Windows .exe und .msi Dateien ==="
-          find ./artifacts/windows -type f \( -name "*.exe" -o -name "*.msi" \) 2>/dev/null | head -30
+          echo "=== Artifacts ==="
+          find ./artifacts/ 2>/dev/null
 
       - name: Copy release artifacts (whitelist only)
         run: |
