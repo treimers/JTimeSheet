@@ -168,20 +168,6 @@ jobs:
         id: get_version
         run: echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_ENV
 
-      - name: Debug – Artifact-Struktur anzeigen
-        run: |
-          echo "=== Verzeichnisstruktur unter ./artifacts ==="
-          find ./artifacts -type d | head -30
-          echo ""
-          echo "=== Alle JTimeSheet-Dateien (erste 50) ==="
-          find ./artifacts -type f -path "*JTimeSheet*" | head -50
-          echo ""
-          echo "=== Alle Dateien pro Artifact-Ordner ==="
-          for d in linux windows macos-arm64 macos-intel; do
-            echo "--- artifacts/$d ---"
-            find ./artifacts/$d -type f 2>/dev/null | head -20
-          done
-
       - name: Copy release artifacts (whitelist only)
         run: |
           mkdir -p ./artifacts/release
@@ -190,18 +176,21 @@ jobs:
             src=$(find "$1" -type f -name "$2" 2>/dev/null | head -1)
             if [ -n "$src" ]; then cp "$src" "./artifacts/release/$3"; fi
           }
-          copy_if_exists ./artifacts/linux "JTimeSheet-*-linux.zip" "JTimeSheet-${VERSION}-linux-linux.zip"
-          copy_if_exists ./artifacts/linux "JTimeSheet_*-linux.deb" "JTimeSheet_${VERSION}-linux.deb"
-          copy_if_exists ./artifacts/linux "JTimeSheet_*-linux.rpm" "JTimeSheet_${VERSION}-linux.rpm"
-          copy_if_exists ./artifacts/macos-arm64 "JTimeSheet-*.zip" "JTimeSheet-${VERSION}-mac-macos-arm64.zip"
-          copy_if_exists ./artifacts/macos-arm64 "JTimeSheet_*-macos-arm64.dmg" "JTimeSheet_${VERSION}-macos-arm64.dmg"
-          copy_if_exists ./artifacts/macos-arm64 "JTimeSheet_*-macos-arm64.pkg" "JTimeSheet_${VERSION}-macos-arm64.pkg"
-          copy_if_exists ./artifacts/macos-intel "JTimeSheet-*.zip" "JTimeSheet-${VERSION}-mac-macos-intel.zip"
-          copy_if_exists ./artifacts/macos-intel "JTimeSheet_*-macos-intel.dmg" "JTimeSheet_${VERSION}-macos-intel.dmg"
-          copy_if_exists ./artifacts/macos-intel "JTimeSheet_*-macos-intel.pkg" "JTimeSheet_${VERSION}-macos-intel.pkg"
-          copy_if_exists ./artifacts/windows "JTimeSheet-*-windows.zip" "JTimeSheet-${VERSION}-windows-windows.zip"
-          copy_if_exists ./artifacts/windows "JTimeSheet_*-windows.exe" "JTimeSheet_${VERSION}-windows.exe"
-          copy_if_exists ./artifacts/windows "JTimeSheet_*-windows.msi" "JTimeSheet_${VERSION}-windows.msi"
+          # Linux: Dateien direkt unter artifacts/linux/ (JTimeSheet_1.0.deb, nicht -linux)
+          copy_if_exists ./artifacts/linux "JTimeSheet-*-linux.zip" "JTimeSheet-${VERSION}-linux-x64.zip"
+          copy_if_exists ./artifacts/linux "JTimeSheet_*.deb" "JTimeSheet_${VERSION}-linux.deb"
+          copy_if_exists ./artifacts/linux "JTimeSheet_*.rpm" "JTimeSheet_${VERSION}-linux.rpm"
+          # macOS: Dateien unter osx/ oder osx/assets/ (JTimeSheet-1.0-mac.zip, JTimeSheet_1.0.dmg)
+          copy_if_exists ./artifacts/macos-arm64 "JTimeSheet-*-mac.zip" "JTimeSheet-${VERSION}-mac-macos-arm64.zip"
+          copy_if_exists ./artifacts/macos-arm64 "JTimeSheet_*.dmg" "JTimeSheet_${VERSION}-macos-arm64.dmg"
+          copy_if_exists ./artifacts/macos-arm64 "JTimeSheet_*.pkg" "JTimeSheet_${VERSION}-macos-arm64.pkg"
+          copy_if_exists ./artifacts/macos-intel "JTimeSheet-*-mac.zip" "JTimeSheet-${VERSION}-macos-x64.zip"
+          copy_if_exists ./artifacts/macos-intel "JTimeSheet_*.dmg" "JTimeSheet_${VERSION}-macos-intel.dmg"
+          copy_if_exists ./artifacts/macos-intel "JTimeSheet_*.pkg" "JTimeSheet_${VERSION}-macos-intel.pkg"
+          # Windows: JTimeSheet_${VERSION}-.exe (Installer), nicht JTimeSheet-windows.exe (Launcher)
+          copy_if_exists ./artifacts/windows "JTimeSheet-*-windows.zip" "JTimeSheet-${VERSION}-windows-x64.zip"
+          copy_if_exists ./artifacts/windows "JTimeSheet_*.exe" "JTimeSheet_${VERSION}-windows.exe"
+          copy_if_exists ./artifacts/windows "JTimeSheet_*.msi" "JTimeSheet_${VERSION}-windows.msi"
 
       - name: Create GitHub Release with gh CLI
         env:
@@ -212,16 +201,16 @@ jobs:
           # Explizite Reihenfolge, fehlende Dateien werden übersprungen (kein Abbruch)
           release_assets=()
           add_if_exists() { if [ -f "$1" ]; then release_assets+=( "$1" ); fi; }
-          add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-linux-linux.zip"
+          add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-linux-x64.zip"
           add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-linux.deb"
           add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-linux.rpm"
           add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-mac-macos-arm64.zip"
           add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-macos-arm64.dmg"
           add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-macos-arm64.pkg"
-          add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-mac-macos-intel.zip"
+          add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-macos-x64.zip"
           add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-macos-intel.dmg"
           add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-macos-intel.pkg"
-          add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-windows-windows.zip"
+          add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-windows-x64.zip"
           add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-windows.exe"
           add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-windows.msi"
           if [ ${#release_assets[@]} -eq 0 ]; then
