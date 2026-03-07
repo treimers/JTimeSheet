@@ -124,9 +124,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-arm64
-          path: |
-            target/deploy/osx-aarch64/**
-            target/deploy/osx-x86_64/**
+          path: target/deploy/
 
   build-macos-intel:
     needs: check-version
@@ -195,13 +193,23 @@ jobs:
           cp_if "${ARTIFACTS}/linux/JTimeSheet-${VERSION}-linux.zip" "JTimeSheet-${VERSION}-linux-x64.zip"
           cp_if "${ARTIFACTS}/linux/JTimeSheet_${VERSION}.deb" "JTimeSheet_${VERSION}-linux-x64.deb"
           cp_if "${ARTIFACTS}/linux/JTimeSheet_${VERSION}.rpm" "JTimeSheet_${VERSION}-linux-x64.rpm"
-          # macOS ARM64 (DMG ggf. in assets/)
-          cp_if "${ARTIFACTS}/macos-arm64/JTimeSheet-${VERSION}-mac.zip" "JTimeSheet-${VERSION}-macos-arm64.zip"
-          cp_if "${ARTIFACTS}/macos-arm64/assets/JTimeSheet_${VERSION}.dmg" "JTimeSheet_${VERSION}-macos-arm64.dmg"
-          cp_if "${ARTIFACTS}/macos-arm64/JTimeSheet_${VERSION}.pkg" "JTimeSheet_${VERSION}-macos-arm64.pkg"
-          # macOS Intel (DMG in assets/)
+          # macOS ARM64 (aus target/deploy/ → target/deploy/osx-aarch64 oder osx-x86_64)
+          cp_if_first() { dest="$1"; shift; for src in "$@"; do if [ -f "$src" ]; then cp "$src" "$RELEASE/$dest"; break; fi; done; }
+          cp_if_first "JTimeSheet-${VERSION}-macos-arm64.zip" \
+            "${ARTIFACTS}/macos-arm64/JTimeSheet-${VERSION}-mac.zip" \
+            "${ARTIFACTS}/macos-arm64/target/deploy/osx-aarch64/JTimeSheet-${VERSION}-mac.zip" \
+            "${ARTIFACTS}/macos-arm64/target/deploy/osx-x86_64/JTimeSheet-${VERSION}-mac.zip"
+          cp_if_first "JTimeSheet_${VERSION}-macos-arm64.dmg" \
+            "${ARTIFACTS}/macos-arm64/JTimeSheet_${VERSION}.dmg" \
+            "${ARTIFACTS}/macos-arm64/target/deploy/osx-aarch64/JTimeSheet_${VERSION}.dmg" \
+            "${ARTIFACTS}/macos-arm64/target/deploy/osx-x86_64/JTimeSheet_${VERSION}.dmg"
+          cp_if_first "JTimeSheet_${VERSION}-macos-arm64.pkg" \
+            "${ARTIFACTS}/macos-arm64/JTimeSheet_${VERSION}.pkg" \
+            "${ARTIFACTS}/macos-arm64/target/deploy/osx-aarch64/JTimeSheet_${VERSION}.pkg" \
+            "${ARTIFACTS}/macos-arm64/target/deploy/osx-x86_64/JTimeSheet_${VERSION}.pkg"
+          # macOS Intel (DMG im Root laut Debug)
           cp_if "${ARTIFACTS}/macos-intel/JTimeSheet-${VERSION}-mac.zip" "JTimeSheet-${VERSION}-macos-x64.zip"
-          cp_if "${ARTIFACTS}/macos-intel/assets/JTimeSheet_${VERSION}.dmg" "JTimeSheet_${VERSION}-macos-x64.dmg"
+          cp_if "${ARTIFACTS}/macos-intel/JTimeSheet_${VERSION}.dmg" "JTimeSheet_${VERSION}-macos-x64.dmg"
           cp_if "${ARTIFACTS}/macos-intel/JTimeSheet_${VERSION}.pkg" "JTimeSheet_${VERSION}-macos-x64.pkg"
           # Windows
           cp_if "${ARTIFACTS}/windows/JTimeSheet-${VERSION}-windows.zip" "JTimeSheet-${VERSION}-windows-x64.zip"
