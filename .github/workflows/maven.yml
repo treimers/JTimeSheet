@@ -79,7 +79,7 @@ jobs:
         with:
           name: linux
           path: |
-            target/deploy/linux/**
+            target/deploy/linux-x86_64/**
 
   build-windows:
     needs: check-version
@@ -104,7 +104,7 @@ jobs:
         with:
           name: windows
           path: |
-            target/deploy/windows/**
+            target/deploy/windows-x86_64/**
 
   build-macos-arm64:
     needs: check-version
@@ -124,9 +124,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-arm64
-          path: |
-            target/deploy/osx-arm64/**
-            target/deploy/osx/**
+          path: target/deploy/
 
   build-macos-intel:
     needs: check-version
@@ -148,7 +146,6 @@ jobs:
           name: macos-intel
           path: |
             target/deploy/osx-x86_64/**
-            target/deploy/osx/**
 
   create-release:
     needs: [check-version, build-linux, build-windows, build-macos-arm64, build-macos-intel]
@@ -170,24 +167,32 @@ jobs:
 
       - name: Copy release artifacts (whitelist only)
         run: |
-          mkdir -p ./artifacts/release
+          ARTIFACTS="${{ github.workspace }}/artifacts"
+          RELEASE="${ARTIFACTS}/release"
+          mkdir -p "$RELEASE"
           VERSION="${{ env.VERSION }}"
-          copy_if_exists() {
-            src=$(find "$1" -type f -name "$2" 2>/dev/null | head -1)
-            if [ -n "$src" ]; then cp "$src" "./artifacts/release/$3"; fi
-          }
-          copy_if_exists ./artifacts/linux "JTimeSheet-*-linux.zip" "JTimeSheet-${VERSION}-linux-linux.zip"
-          copy_if_exists ./artifacts/linux "JTimeSheet_*-linux.deb" "JTimeSheet_${VERSION}-linux.deb"
-          copy_if_exists ./artifacts/linux "JTimeSheet_*-linux.rpm" "JTimeSheet_${VERSION}-linux.rpm"
-          copy_if_exists ./artifacts/macos-arm64 "JTimeSheet-*.zip" "JTimeSheet-${VERSION}-mac-macos-arm64.zip"
-          copy_if_exists ./artifacts/macos-arm64 "JTimeSheet_*-macos-arm64.dmg" "JTimeSheet_${VERSION}-macos-arm64.dmg"
-          copy_if_exists ./artifacts/macos-arm64 "JTimeSheet_*-macos-arm64.pkg" "JTimeSheet_${VERSION}-macos-arm64.pkg"
-          copy_if_exists ./artifacts/macos-intel "JTimeSheet-*.zip" "JTimeSheet-${VERSION}-mac-macos-intel.zip"
-          copy_if_exists ./artifacts/macos-intel "JTimeSheet_*-macos-intel.dmg" "JTimeSheet_${VERSION}-macos-intel.dmg"
-          copy_if_exists ./artifacts/macos-intel "JTimeSheet_*-macos-intel.pkg" "JTimeSheet_${VERSION}-macos-intel.pkg"
-          copy_if_exists ./artifacts/windows "JTimeSheet-*-windows.zip" "JTimeSheet-${VERSION}-windows-windows.zip"
-          copy_if_exists ./artifacts/windows "JTimeSheet_*-windows.exe" "JTimeSheet_${VERSION}-windows.exe"
-          copy_if_exists ./artifacts/windows "JTimeSheet_*-windows.msi" "JTimeSheet_${VERSION}-windows.msi"
+          cp_if() { if [ -f "$1" ]; then cp -v "$1" "$RELEASE/$2"; else echo "File not found: $1"; fi; }
+          # Pfade aus Debug: upload-artifact flacht ab, Dateien liegen direkt in artifacts/<platform>/
+          # Linux
+          cp_if "${ARTIFACTS}/linux/JTimeSheet-${VERSION}-linux.zip" "JTimeSheet-${VERSION}-linux-x64.zip"
+          cp_if "${ARTIFACTS}/linux/JTimeSheet_${VERSION}.deb" "JTimeSheet_${VERSION}-linux-x64.deb"
+          cp_if "${ARTIFACTS}/linux/JTimeSheet_${VERSION}.rpm" "JTimeSheet_${VERSION}-linux-x64.rpm"
+          # macOS ARM64: osx-aarch_64/ (DMG in assets/)
+          cp_if "${ARTIFACTS}/macos-arm64/osx-aarch_64/JTimeSheet-${VERSION}-mac.zip" "JTimeSheet-${VERSION}-macos-arm64.zip"
+          cp_if "${ARTIFACTS}/macos-arm64/osx-aarch_64/assets/JTimeSheet_${VERSION}.dmg" "JTimeSheet_${VERSION}-macos-arm64.dmg"
+          cp_if "${ARTIFACTS}/macos-arm64/osx-aarch_64/JTimeSheet_${VERSION}.pkg" "JTimeSheet_${VERSION}-macos-arm64.pkg"
+          # macOS Intel (DMG in assets/)
+          cp_if "${ARTIFACTS}/macos-intel/JTimeSheet-${VERSION}-mac.zip" "JTimeSheet-${VERSION}-macos-x64.zip"
+          cp_if "${ARTIFACTS}/macos-intel/assets/JTimeSheet_${VERSION}.dmg" "JTimeSheet_${VERSION}-macos-x64.dmg"
+          cp_if "${ARTIFACTS}/macos-intel/JTimeSheet_${VERSION}.pkg" "JTimeSheet_${VERSION}-macos-x64.pkg"
+          # Windows
+          cp_if "${ARTIFACTS}/windows/JTimeSheet-${VERSION}-windows.zip" "JTimeSheet-${VERSION}-windows-x64.zip"
+          cp_if "${ARTIFACTS}/windows/JTimeSheet_${VERSION}.exe" "JTimeSheet_${VERSION}-windows-x64.exe"
+          cp_if "${ARTIFACTS}/windows/JTimeSheet_${VERSION}.msi" "JTimeSheet_${VERSION}-windows-x64.msi"
+
+
+      - name: Debug – Release-Verzeichnis
+        run: ls -la ./artifacts/release/
 
       - name: Create GitHub Release with gh CLI
         env:
@@ -197,24 +202,28 @@ jobs:
           VERSION="${{ env.VERSION }}"
           # Explizite Reihenfolge, fehlende Dateien werden übersprungen (kein Abbruch)
           release_assets=()
-          add_if_exists() { if [ -f "$1" ]; then release_assets+=( "$1" ); fi; }
-          add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-linux-linux.zip"
-          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-linux.deb"
-          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-linux.rpm"
-          add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-mac-macos-arm64.zip"
+          add_if_exists() { if [ -f "$1" ]; then release_assets+=( "$1" ); else echo "File not found: $1"; fi; }
+          add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-linux-x64.zip"
+          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-linux-x64.deb"
+          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-linux-x64.rpm"
+          add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-macos-arm64.zip"
           add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-macos-arm64.dmg"
           add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-macos-arm64.pkg"
-          add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-mac-macos-intel.zip"
-          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-macos-intel.dmg"
-          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-macos-intel.pkg"
-          add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-windows-windows.zip"
-          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-windows.exe"
-          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-windows.msi"
+          add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-macos-x64.zip"
+          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-macos-x64.dmg"
+          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-macos-x64.pkg"
+          add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-windows-x64.zip"
+          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-windows-x64.exe"
+          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-windows-x64.msi"
           if [ ${#release_assets[@]} -eq 0 ]; then
             echo "No release artifacts found in $RELEASE_DIR/"
             exit 1
           fi
           echo "Uploading ${#release_assets[@]} asset(s) in order: Linux → macOS ARM64 → macOS Intel → Windows"
+          echo "=== release_assets (add_if_exists hat hinzugefügt) ==="
+          for i in "${!release_assets[@]}"; do
+            echo "  [$i] ${release_assets[$i]}"
+          done
           cat << 'NOTES' | sed 's/^          //' > release-notes.md
           ## Downloads
 
@@ -235,6 +244,7 @@ jobs:
           ### Windows
           - **ZIP** – portable archive
           - **MSI** – installer
+          - **EXE** – installer
 
           ### Source code
           Automatically generated archives are available below.
@@ -244,8 +254,12 @@ jobs:
           else
             RELEASE_TAG="v${VERSION}"
           fi
-          gh release create "${RELEASE_TAG}" "${release_assets[@]}" \
+          gh release delete "${RELEASE_TAG}" --yes 2>/dev/null || true
+          gh release create "${RELEASE_TAG}" \
             --title "Release ${RELEASE_TAG}" \
             -F release-notes.md \
             --draft=false \
             --repo treimers/JTimeSheet
+          for f in "${release_assets[@]}"; do
+            gh release upload "${RELEASE_TAG}" "$f" --clobber --repo treimers/JTimeSheet
+          done
