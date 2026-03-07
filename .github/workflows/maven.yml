@@ -187,9 +187,9 @@ jobs:
           cp_if "${ARTIFACTS}/macos-arm64/osx-aarch_64/JTimeSheet-${VERSION}-mac.zip" "JTimeSheet-${VERSION}-macos-arm64.zip"
           cp_if "${ARTIFACTS}/macos-arm64/osx-aarch_64/assets/JTimeSheet_${VERSION}.dmg" "JTimeSheet_${VERSION}-macos-arm64.dmg"
           cp_if "${ARTIFACTS}/macos-arm64/osx-aarch_64/JTimeSheet_${VERSION}.pkg" "JTimeSheet_${VERSION}-macos-arm64.pkg"
-          # macOS Intel (DMG in assets/)
+          # macOS Intel
           cp_if "${ARTIFACTS}/macos-intel/JTimeSheet-${VERSION}-mac.zip" "JTimeSheet-${VERSION}-macos-x64.zip"
-          cp_if "${ARTIFACTS}/macos-intel/assets/JTimeSheet_${VERSION}.dmg" "JTimeSheet_${VERSION}-macos-x64.dmg"
+          cp_if "${ARTIFACTS}/macos-intel/JTimeSheet_${VERSION}.dmg" "JTimeSheet_${VERSION}-macos-x64.dmg"
           cp_if "${ARTIFACTS}/macos-intel/JTimeSheet_${VERSION}.pkg" "JTimeSheet_${VERSION}-macos-x64.pkg"
           # Windows
           cp_if "${ARTIFACTS}/windows/JTimeSheet-${VERSION}-windows.zip" "JTimeSheet-${VERSION}-windows-x64.zip"
