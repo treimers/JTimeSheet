@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 import treimers.net.jtimesheet.model.Activity;
 import treimers.net.jtimesheet.model.AppSettings;
@@ -41,17 +42,47 @@ public final class ReminderSuggestionLogic {
             AppSettings settings,
             boolean fromReminder,
             LocalDateTime programStartTime) {
+        return compute(now, activities, customers, lastActivity, contextCustomerId, contextProjectId,
+                settings, fromReminder, programStartTime, null);
+    }
+
+    /**
+     * Like {@link #compute(LocalDateTime, List, List, Activity, String, String, AppSettings, boolean, LocalDateTime)}
+     * but with optional debug logging. When {@code debugLog} is non-null, reasoning and suggestion details are appended.
+     */
+    public ReminderSuggestion compute(
+            LocalDateTime now,
+            List<Activity> activities,
+            List<Customer> customers,
+            Activity lastActivity,
+            String contextCustomerId,
+            String contextProjectId,
+            AppSettings settings,
+            boolean fromReminder,
+            LocalDateTime programStartTime,
+            Consumer<String> debugLog) {
         int timeGridMinutes = AppSettings.normalizeTimeGridMinutes(settings.getTimeGridMinutes());
         LocalDateTime nowOnGrid = alignToTimeGrid(now, timeGridMinutes);
         LocalDateTime defaultStart = defaultStartForSuggestion(nowOnGrid, programStartTime, timeGridMinutes);
         LocalDate today = now.toLocalDate();
 
+        if (debugLog != null) {
+            debugLog.accept(String.format("Vorschlags-Berechnung: now=%s, fromReminder=%s, contextCustomer=%s, contextProject=%s",
+                    now, fromReminder, contextCustomerId, contextProjectId));
+        }
+
         String customerId = contextCustomerId != null ? contextCustomerId : getDefaultCustomerId(customers, lastActivity);
         Customer customer = findCustomer(customers, customerId);
         if (customer == null) {
+            if (debugLog != null) {
+                debugLog.accept("Kunde: null (kein Kunde gefunden für contextCustomerId)");
+            }
             // Rules.md Szenario 1: Keine vergangenen Aktivitäten → Start=Programmstart (gerundet), Ende=jetzt
             Customer first = customers != null && !customers.isEmpty() ? customers.get(0) : null;
             if (first == null) {
+                if (debugLog != null) {
+                    debugLog.accept(String.format("Keine Kunden vorhanden → Von=%s, Bis=%s, Kunde/Projekt/Task=null, Typ=DEFAULT_RANGE", defaultStart, nowOnGrid));
+                }
                 return ReminderSuggestion.suggest(
                         defaultStart,
                         nowOnGrid,
@@ -64,6 +95,11 @@ public final class ReminderSuggestionLogic {
             Task firstTask = firstProject == null || firstProject.getTasks().isEmpty()
                     ? null
                     : firstProject.getTasks().get(0);
+            if (debugLog != null) {
+                debugLog.accept(String.format("Keine vergangenen Aktivitäten → erster Kunde/Projekt/Task: %s/%s/%s, Von=%s, Bis=%s, Typ=DEFAULT_RANGE",
+                        first.getId(), firstProject != null ? firstProject.getId() : null, firstTask != null ? firstTask.getId() : null,
+                        defaultStart, nowOnGrid));
+            }
             return ReminderSuggestion.suggest(
                     defaultStart,
                     nowOnGrid,
@@ -88,6 +124,9 @@ public final class ReminderSuggestionLogic {
             if (lastTo != null && lastTo.toLocalDate().equals(today) && !lastTo.isAfter(nowOnGrid)
                     && (lastEndBeforeNow == null || lastTo.isAfter(lastEndBeforeNow))) {
                 lastEndBeforeNow = lastTo;
+                if (debugLog != null) {
+                    debugLog.accept(String.format("Carry-over: lastActivity Ende %s als Start übernommen (gleicher Kunde/Projekt)", lastTo));
+                }
             }
         }
 
@@ -110,7 +149,10 @@ public final class ReminderSuggestionLogic {
                     ? forDefaults.getTaskId()
                     : (defaultProjectId != null ? getFirstTaskId(customer, defaultProjectId) : null);
             if (containingNow != null) {
-                // User is inside an activity ending in the future → Reminder: nothing; Add Activity: start=end=now
+                if (debugLog != null) {
+                    debugLog.accept(String.format("Letzte Aktivität endet in der Zukunft, JETZT liegt in laufender Aktivität → blockedForReminder, Von=Bis=%s, Kunde=%s, Projekt=%s, Task=%s",
+                            nowOnGrid, customerId, defaultProjectId, defaultTaskId));
+                }
                 return ReminderSuggestion.suggestNowOnly(nowOnGrid, customerId, defaultProjectId, defaultTaskId);
             }
             // Rule 7: Add Activity – suggest the gap (free slot) before now if there is one
@@ -120,9 +162,16 @@ public final class ReminderSuggestionLogic {
                 LocalDateTime[] range = capEndTimeToNow(slotFrom, nowOnGrid, nowOnGrid);
                 String pid = last != null ? last.getProjectId() : (projectId != null ? projectId : getFirstProjectId(customer));
                 String tid = last != null ? last.getTaskId() : (pid != null ? getFirstTaskId(customer, pid) : null);
+                if (debugLog != null) {
+                    debugLog.accept(String.format("Letzte Aktivität endet in der Zukunft, Lücke vorhanden → Von=%s, Bis=%s, Kunde=%s, Projekt=%s, Task=%s, Typ=GAP",
+                            range[0], range[1], customerId, pid, tid));
+                }
                 return ReminderSuggestion.suggest(range[0], range[1], customerId, pid, tid, ReminderSuggestion.SuggestionType.GAP);
             }
-            // No gap (e.g. activity starts at day start) → Reminder: nothing; Add Activity: start=end=now
+            if (debugLog != null) {
+                debugLog.accept(String.format("Letzte Aktivität endet in der Zukunft, keine Lücke → blockedForReminder, Von=Bis=%s, Kunde=%s, Projekt=%s, Task=%s",
+                        nowOnGrid, customerId, defaultProjectId, defaultTaskId));
+            }
             return ReminderSuggestion.suggestNowOnly(nowOnGrid, customerId, defaultProjectId, defaultTaskId);
         }
 
@@ -145,6 +194,14 @@ public final class ReminderSuggestionLogic {
         ReminderSuggestion.SuggestionType type = gapNonEmpty
                 ? ReminderSuggestion.SuggestionType.GAP
                 : ReminderSuggestion.SuggestionType.DEFAULT_RANGE;
+
+        if (debugLog != null) {
+            String reason = gapNonEmpty
+                    ? String.format("Lücke von letztem Ende %s bis jetzt", lastEndBeforeNow)
+                    : String.format("Keine Lücke, Programmstart %s bis jetzt", defaultStart);
+            debugLog.accept(String.format("%s → Von=%s, Bis=%s, Kunde=%s, Projekt=%s, Task=%s, Typ=%s",
+                    reason, range[0], range[1], customerId, defaultProjectId, defaultTaskId, type));
+        }
 
         return ReminderSuggestion.suggest(range[0], range[1], customerId, defaultProjectId, defaultTaskId, type);
     }

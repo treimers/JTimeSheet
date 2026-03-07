@@ -67,6 +67,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
+import javafx.scene.image.Image;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.Dialog;
@@ -347,7 +348,7 @@ public class MainController {
                 setReminderDebug(!reminderDebug);
                 e.consume();
             } else if (new KeyCodeCombination(KeyCode.F12, KeyCombination.SHIFT_DOWN).match(e)) {
-                openReminderDebugDialog();
+                toggleReminderDebugDialog();
                 e.consume();
             }
         });
@@ -358,6 +359,7 @@ public class MainController {
         }
         stage.setTitle(i18n("app.title"));
         stage.setScene(scene);
+        setStageIcon(stage);
         stage.setMaximized(true);
         stage.show();
 
@@ -366,6 +368,13 @@ public class MainController {
         updateTableOrCalendarVisibility();
         updateWriteTimesheetButtonForTab();
         startReminderScheduler();
+    }
+
+    private void setStageIcon(Stage stage) {
+        var iconUrl = MainController.class.getResource("/treimers/net/jtimesheet/JTimeSheet_128x128.png");
+        if (iconUrl != null) {
+            stage.getIcons().add(new Image(iconUrl.toExternalForm()));
+        }
     }
 
     private Menu manageMenu() {
@@ -2463,7 +2472,8 @@ public class MainController {
                 null,
                 settings,
                 true,
-                programStartTime);
+                programStartTime,
+                reminderDebug ? this::debugSuggestion : null);
         if (s.isBlockedForReminder()) {
             if (reminderDebug) {
                 debugReminder(
@@ -2501,6 +2511,14 @@ public class MainController {
         updateReminderDebugTextArea();
     }
 
+    /** Logs suggestion debug when reminderDebug is enabled. Used by ReminderSuggestionLogic. */
+    private void debugSuggestion(String msg) {
+        if (reminderDebug) {
+            reminderDebugLog.add(REMINDER_DEBUG_PREFIX + "Vorschlag: " + msg);
+            updateReminderDebugTextArea();
+        }
+    }
+
     private void debugReminderInitialSettings() {
         int interval = treimers.net.jtimesheet.model.AppSettings.normalizeReminderIntervalMinutes(
                 settings.getReminderIntervalMinutes());
@@ -2524,7 +2542,7 @@ public class MainController {
         }
     }
 
-    private void openReminderDebugDialog() {
+    private void toggleReminderDebugDialog() {
         if (reminderDebugDialog == null) {
             reminderDebugDialog = new Dialog<>();
             reminderDebugDialog.setTitle("Reminder-Debug-Log");
@@ -2537,16 +2555,27 @@ public class MainController {
             reminderDebugDialog.getDialogPane().setContent(reminderDebugTextArea);
             reminderDebugDialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
             reminderDebugDialog.initOwner(primaryStage);
-            reminderDebugDialog.initModality(Modality.WINDOW_MODAL);
-            reminderDebugDialog.getDialogPane().addEventFilter(KeyEvent.KEY_PRESSED, e -> {
-                if (new KeyCodeCombination(KeyCode.F12).match(e)) {
+            reminderDebugDialog.initModality(Modality.NONE);
+            reminderDebugDialog.setOnShown(e -> {
+                var w = reminderDebugDialog.getDialogPane().getScene().getWindow();
+                if (w instanceof Stage) {
+                    ((Stage) w).setResizable(true);
+                }
+            });
+            reminderDebugDialog.getDialogPane().addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
+                if (new KeyCodeCombination(KeyCode.F12).match(ev)) {
                     setReminderDebug(!reminderDebug);
-                    e.consume();
+                    ev.consume();
+                } else if (new KeyCodeCombination(KeyCode.F12, KeyCombination.SHIFT_DOWN).match(ev)) {
+                    reminderDebugDialog.hide();
+                    ev.consume();
                 }
             });
         }
-        updateReminderDebugTextArea();
-        if (!reminderDebugDialog.isShowing()) {
+        if (reminderDebugDialog.isShowing()) {
+            reminderDebugDialog.hide();
+        } else {
+            updateReminderDebugTextArea();
             reminderDebugDialog.show();
         }
     }
@@ -2619,7 +2648,8 @@ public class MainController {
                 null,
                 settings,
                 fromReminder,
-                programStartTime);
+                programStartTime,
+                reminderDebug ? this::debugSuggestion : null);
         if (s.isBlockedForReminder()) {
             if (fromReminder) {
                 return;
@@ -2642,7 +2672,8 @@ public class MainController {
                 project != null ? project.getId() : null,
                 settings,
                 false,
-                programStartTime);
+                programStartTime,
+                reminderDebug ? this::debugSuggestion : null);
         if (s.getRange() != null) {
             return s.getRange();
         }
