@@ -266,8 +266,11 @@ jobs:
             RELEASE_TAG="v${VERSION}"
           fi
           gh release delete "${RELEASE_TAG}" --yes 2>/dev/null || true
-          gh release create "${RELEASE_TAG}" "${release_assets[@]}" \
+          gh release create "${RELEASE_TAG}" \
             --title "Release ${RELEASE_TAG}" \
             -F release-notes.md \
             --draft=false \
             --repo treimers/JTimeSheet
+          for f in "${release_assets[@]}"; do
+            gh release upload "${RELEASE_TAG}" "$f" --clobber --repo treimers/JTimeSheet
+          done
