@@ -187,7 +187,7 @@ jobs:
           RELEASE="${ARTIFACTS}/release"
           mkdir -p "$RELEASE"
           VERSION="${{ env.VERSION }}"
-          cp_if() { if [ -f "$1" ]; then cp "$1" "$RELEASE/$2"; fi; }
+          cp_if() { if [ -f "$1" ]; then cp -v "$1" "$RELEASE/$2"; else echo "File not found: $1"; fi; }
           # Pfade aus Debug: upload-artifact flacht ab, Dateien liegen direkt in artifacts/<platform>/
           # Linux
           cp_if "${ARTIFACTS}/linux/JTimeSheet-${VERSION}-linux.zip" "JTimeSheet-${VERSION}-linux-x64.zip"
@@ -205,6 +205,7 @@ jobs:
           cp_if "${ARTIFACTS}/windows/JTimeSheet-${VERSION}-windows.zip" "JTimeSheet-${VERSION}-windows-x64.zip"
           cp_if "${ARTIFACTS}/windows/JTimeSheet_${VERSION}.exe" "JTimeSheet_${VERSION}-windows-x64.exe"
           cp_if "${ARTIFACTS}/windows/JTimeSheet_${VERSION}.msi" "JTimeSheet_${VERSION}-windows-x64.msi"
+
 
       - name: Debug – Release-Verzeichnis
         run: ls -la ./artifacts/release/
