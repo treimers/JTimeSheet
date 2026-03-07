@@ -185,7 +185,7 @@
 							<assetsDir>src/main/deploy/package</assetsDir>
 							<createZipball>true</createZipball>
 							<organizationName>${project.organization.name}</organizationName>
-							<outputDirectory>${project.build.directory}/deploy/${os.detected.name}</outputDirectory>
+							<outputDirectory>${project.build.directory}/deploy/${os.detected.classifier}</outputDirectory>
 							<customizedJre>false</customizedJre>
 							<extractResources>false</extractResources>
 							<macConfig>
