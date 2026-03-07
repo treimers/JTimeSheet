@@ -173,17 +173,7 @@ jobs:
           echo "=== Workspace: ${{ github.workspace }} ==="
           echo "=== PWD: $(pwd) ==="
           echo ""
-          echo "=== Windows-Dateien (sollten existieren) ==="
-          ls -la ./artifacts/windows/JTimeSheet*.exe ./artifacts/windows/JTimeSheet*.msi ./artifacts/windows/JTimeSheet*.zip 2>/dev/null || echo "Nicht gefunden"
-          echo ""
-          echo "=== Alle Artifacts (gekürzt) ==="
-          find ./artifacts -type f -name "JTimeSheet*" 2>/dev/null | head -30
-          echo ""
-          echo "=== Find-Test JTimeSheet_*.exe ==="
-          find ./artifacts/windows -type f -name "JTimeSheet_*.exe" 2>/dev/null || echo "Keine gefunden"
-          echo ""
-          echo "=== Find-Test JTimeSheet_*.msi ==="
-          find ./artifacts/windows -type f -name "JTimeSheet_*.msi" 2>/dev/null || echo "Keine gefunden"
+          ls -Rla ./artifacts 2>/dev/null || echo "Nicht gefunden"
 
       - name: Copy release artifacts (whitelist only)
         run: |
@@ -191,9 +181,6 @@ jobs:
           RELEASE="${ARTIFACTS}/release"
           mkdir -p "$RELEASE"
           VERSION="${{ env.VERSION }}"
-          echo ""
-          echo "=== Inhalt artifacts/ vor Copy ==="
-          ls -la "$ARTIFACTS"
           cp_if() { if [ -f "$1" ]; then cp "$1" "$RELEASE/$2"; fi; }
           cp_if_first() { dest="$1"; shift; for src in "$@"; do [ -f "$src" ] && cp "$src" "$RELEASE/$dest" && break; done; }
           # Linux: artifacts/linux/
