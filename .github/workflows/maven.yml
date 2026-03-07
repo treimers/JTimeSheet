@@ -193,24 +193,10 @@ jobs:
           cp_if "${ARTIFACTS}/linux/JTimeSheet-${VERSION}-linux.zip" "JTimeSheet-${VERSION}-linux-x64.zip"
           cp_if "${ARTIFACTS}/linux/JTimeSheet_${VERSION}.deb" "JTimeSheet_${VERSION}-linux-x64.deb"
           cp_if "${ARTIFACTS}/linux/JTimeSheet_${VERSION}.rpm" "JTimeSheet_${VERSION}-linux-x64.rpm"
-          # macOS ARM64 (os-maven-plugin: osx-aarch_64 mit Unterstrich!)
-          cp_if_first() { dest="$1"; shift; for src in "$@"; do if [ -f "$src" ]; then cp "$src" "$RELEASE/$dest"; break; fi; done; }
-          cp_if_first "JTimeSheet-${VERSION}-macos-arm64.zip" \
-            "${ARTIFACTS}/macos-arm64/JTimeSheet-${VERSION}-mac.zip" \
-            "${ARTIFACTS}/macos-arm64/osx-aarch_64/JTimeSheet-${VERSION}-mac.zip" \
-            "${ARTIFACTS}/macos-arm64/target/deploy/osx-aarch_64/JTimeSheet-${VERSION}-mac.zip" \
-            "${ARTIFACTS}/macos-arm64/target/deploy/osx-x86_64/JTimeSheet-${VERSION}-mac.zip"
-          cp_if_first "JTimeSheet_${VERSION}-macos-arm64.dmg" \
-            "${ARTIFACTS}/macos-arm64/JTimeSheet_${VERSION}.dmg" \
-            "${ARTIFACTS}/macos-arm64/osx-aarch_64/JTimeSheet_${VERSION}.dmg" \
-            "${ARTIFACTS}/macos-arm64/osx-aarch_64/assets/JTimeSheet_${VERSION}.dmg" \
-            "${ARTIFACTS}/macos-arm64/target/deploy/osx-aarch_64/JTimeSheet_${VERSION}.dmg" \
-            "${ARTIFACTS}/macos-arm64/target/deploy/osx-x86_64/JTimeSheet_${VERSION}.dmg"
-          cp_if_first "JTimeSheet_${VERSION}-macos-arm64.pkg" \
-            "${ARTIFACTS}/macos-arm64/JTimeSheet_${VERSION}.pkg" \
-            "${ARTIFACTS}/macos-arm64/osx-aarch_64/JTimeSheet_${VERSION}.pkg" \
-            "${ARTIFACTS}/macos-arm64/target/deploy/osx-aarch_64/JTimeSheet_${VERSION}.pkg" \
-            "${ARTIFACTS}/macos-arm64/target/deploy/osx-x86_64/JTimeSheet_${VERSION}.pkg"
+          # macOS ARM64: osx-aarch_64/ (DMG in assets/)
+          cp_if "${ARTIFACTS}/macos-arm64/osx-aarch_64/JTimeSheet-${VERSION}-mac.zip" "JTimeSheet-${VERSION}-macos-arm64.zip"
+          cp_if "${ARTIFACTS}/macos-arm64/osx-aarch_64/assets/JTimeSheet_${VERSION}.dmg" "JTimeSheet_${VERSION}-macos-arm64.dmg"
+          cp_if "${ARTIFACTS}/macos-arm64/osx-aarch_64/JTimeSheet_${VERSION}.pkg" "JTimeSheet_${VERSION}-macos-arm64.pkg"
           # macOS Intel (DMG im Root laut Debug)
           cp_if "${ARTIFACTS}/macos-intel/JTimeSheet-${VERSION}-mac.zip" "JTimeSheet-${VERSION}-macos-x64.zip"
           cp_if "${ARTIFACTS}/macos-intel/JTimeSheet_${VERSION}.dmg" "JTimeSheet_${VERSION}-macos-x64.dmg"
@@ -219,6 +205,9 @@ jobs:
           cp_if "${ARTIFACTS}/windows/JTimeSheet-${VERSION}-windows.zip" "JTimeSheet-${VERSION}-windows-x64.zip"
           cp_if "${ARTIFACTS}/windows/JTimeSheet_${VERSION}.exe" "JTimeSheet_${VERSION}-windows-x64.exe"
           cp_if "${ARTIFACTS}/windows/JTimeSheet_${VERSION}.msi" "JTimeSheet_${VERSION}-windows-x64.msi"
+
+      - name: Debug – Release-Verzeichnis
+        run: ls -la ./artifacts/release/
 
       - name: Create GitHub Release with gh CLI
         env:
