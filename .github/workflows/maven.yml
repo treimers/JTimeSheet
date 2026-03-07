@@ -79,7 +79,7 @@ jobs:
         with:
           name: linux
           path: |
-            target/deploy/linux/**
+            target/deploy/linux-x86_64/**
 
   build-windows:
     needs: check-version
@@ -104,7 +104,7 @@ jobs:
         with:
           name: windows
           path: |
-            target/deploy/windows/**
+            target/deploy/windows-x86_64/**
 
   build-macos-arm64:
     needs: check-version
@@ -125,8 +125,7 @@ jobs:
         with:
           name: macos-arm64
           path: |
-            target/deploy/osx-arm64/**
-            target/deploy/osx/**
+            target/deploy/osx-aarch64/**
 
   build-macos-intel:
     needs: check-version
@@ -148,7 +147,6 @@ jobs:
           name: macos-intel
           path: |
             target/deploy/osx-x86_64/**
-            target/deploy/osx/**
 
   create-release:
     needs: [check-version, build-linux, build-windows, build-macos-arm64, build-macos-intel]
@@ -173,7 +171,16 @@ jobs:
           echo "=== Workspace: ${{ github.workspace }} ==="
           echo "=== PWD: $(pwd) ==="
           echo ""
+          echo "=== Vollständige Verzeichnisstruktur ==="
           ls -Rla ./artifacts 2>/dev/null || echo "Nicht gefunden"
+          echo ""
+          echo "=== Pfade der Release-Artefakte (find) ==="
+          VERSION="${{ env.VERSION }}"
+          find ./artifacts -type f \( \
+            -name "JTimeSheet-${VERSION}-linux.zip" -o -name "JTimeSheet_${VERSION}.deb" -o -name "JTimeSheet_${VERSION}.rpm" -o \
+            -name "JTimeSheet-${VERSION}-mac.zip" -o -name "JTimeSheet_${VERSION}.dmg" -o -name "JTimeSheet_${VERSION}.pkg" -o \
+            -name "JTimeSheet-${VERSION}-windows.zip" -o -name "JTimeSheet_${VERSION}.exe" -o -name "JTimeSheet_${VERSION}.msi" \
+          \) -print 2>/dev/null
 
       - name: Copy release artifacts (whitelist only)
         run: |
@@ -182,23 +189,23 @@ jobs:
           mkdir -p "$RELEASE"
           VERSION="${{ env.VERSION }}"
           cp_if() { if [ -f "$1" ]; then cp "$1" "$RELEASE/$2"; fi; }
-          cp_if_first() { dest="$1"; shift; for src in "$@"; do [ -f "$src" ] && cp "$src" "$RELEASE/$dest" && break; done; }
-          # Linux: artifacts/linux/
-          cp_if "${ARTIFACTS}/linux/JTimeSheet-${VERSION}-linux.zip" "JTimeSheet-${VERSION}-linux-x64.zip"
-          cp_if "${ARTIFACTS}/linux/JTimeSheet_${VERSION}.deb" "JTimeSheet_${VERSION}-linux-x64.deb"
-          cp_if "${ARTIFACTS}/linux/JTimeSheet_${VERSION}.rpm" "JTimeSheet_${VERSION}-linux-x64.rpm"
-          # macOS ARM64: osx/ oder osx/assets/
-          cp_if "${ARTIFACTS}/macos-arm64/osx/JTimeSheet-${VERSION}-mac.zip" "JTimeSheet-${VERSION}-macos-arm64.zip"
-          cp_if_first "JTimeSheet_${VERSION}-macos-arm64.dmg" "${ARTIFACTS}/macos-arm64/osx/JTimeSheet_${VERSION}.dmg" "${ARTIFACTS}/macos-arm64/osx/assets/JTimeSheet_${VERSION}.dmg"
-          cp_if_first "JTimeSheet_${VERSION}-macos-arm64.pkg" "${ARTIFACTS}/macos-arm64/osx/JTimeSheet_${VERSION}.pkg" "${ARTIFACTS}/macos-arm64/osx/assets/JTimeSheet_${VERSION}.pkg"
-          # macOS Intel: osx/ oder osx/assets/
-          cp_if "${ARTIFACTS}/macos-intel/osx/JTimeSheet-${VERSION}-mac.zip" "JTimeSheet-${VERSION}-macos-x64.zip"
-          cp_if_first "JTimeSheet_${VERSION}-macos-x64.dmg" "${ARTIFACTS}/macos-intel/osx/JTimeSheet_${VERSION}.dmg" "${ARTIFACTS}/macos-intel/osx/assets/JTimeSheet_${VERSION}.dmg"
-          cp_if_first "JTimeSheet_${VERSION}-macos-x64.pkg" "${ARTIFACTS}/macos-intel/osx/JTimeSheet_${VERSION}.pkg" "${ARTIFACTS}/macos-intel/osx/assets/JTimeSheet_${VERSION}.pkg"
-          # Windows: artifacts/windows/
-          cp_if "${ARTIFACTS}/windows/JTimeSheet-${VERSION}-windows.zip" "JTimeSheet-${VERSION}-windows-x64.zip"
-          cp_if "${ARTIFACTS}/windows/JTimeSheet_${VERSION}.exe" "JTimeSheet_${VERSION}-windows-x64.exe"
-          cp_if "${ARTIFACTS}/windows/JTimeSheet_${VERSION}.msi" "JTimeSheet_${VERSION}-windows-x64.msi"
+          # Pfade aus upload-artifact: target/deploy/<classifier>/** → artifacts/<platform>/target/deploy/<classifier>/
+          # Linux
+          cp_if "${ARTIFACTS}/linux/target/deploy/linux-x86_64/JTimeSheet-${VERSION}-linux.zip" "JTimeSheet-${VERSION}-linux-x64.zip"
+          cp_if "${ARTIFACTS}/linux/target/deploy/linux-x86_64/JTimeSheet_${VERSION}.deb" "JTimeSheet_${VERSION}-linux-x64.deb"
+          cp_if "${ARTIFACTS}/linux/target/deploy/linux-x86_64/JTimeSheet_${VERSION}.rpm" "JTimeSheet_${VERSION}-linux-x64.rpm"
+          # macOS ARM64
+          cp_if "${ARTIFACTS}/macos-arm64/target/deploy/osx-aarch64/JTimeSheet-${VERSION}-mac.zip" "JTimeSheet-${VERSION}-macos-arm64.zip"
+          cp_if "${ARTIFACTS}/macos-arm64/target/deploy/osx-aarch64/JTimeSheet_${VERSION}.dmg" "JTimeSheet_${VERSION}-macos-arm64.dmg"
+          cp_if "${ARTIFACTS}/macos-arm64/target/deploy/osx-aarch64/JTimeSheet_${VERSION}.pkg" "JTimeSheet_${VERSION}-macos-arm64.pkg"
+          # macOS Intel
+          cp_if "${ARTIFACTS}/macos-intel/target/deploy/osx-x86_64/JTimeSheet-${VERSION}-mac.zip" "JTimeSheet-${VERSION}-macos-x64.zip"
+          cp_if "${ARTIFACTS}/macos-intel/target/deploy/osx-x86_64/JTimeSheet_${VERSION}.dmg" "JTimeSheet_${VERSION}-macos-x64.dmg"
+          cp_if "${ARTIFACTS}/macos-intel/target/deploy/osx-x86_64/JTimeSheet_${VERSION}.pkg" "JTimeSheet_${VERSION}-macos-x64.pkg"
+          # Windows
+          cp_if "${ARTIFACTS}/windows/target/deploy/windows-x86_64/JTimeSheet-${VERSION}-windows.zip" "JTimeSheet-${VERSION}-windows-x64.zip"
+          cp_if "${ARTIFACTS}/windows/target/deploy/windows-x86_64/JTimeSheet_${VERSION}.exe" "JTimeSheet_${VERSION}-windows-x64.exe"
+          cp_if "${ARTIFACTS}/windows/target/deploy/windows-x86_64/JTimeSheet_${VERSION}.msi" "JTimeSheet_${VERSION}-windows-x64.msi"
 
       - name: Create GitHub Release with gh CLI
         env:
