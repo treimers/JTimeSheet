@@ -165,6 +165,12 @@ jobs:
         id: get_version
         run: echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_ENV
 
+      - name: Debug – Artifacts
+        run: |  
+          echo "=== Artifacts ==="
+          ls -Rla ./artifacts 2>/dev/null || echo "Nicht gefunden"
+          echo ""
+          
       - name: Copy release artifacts (whitelist only)
         run: |
           ARTIFACTS="${{ github.workspace }}/artifacts"
