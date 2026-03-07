@@ -197,9 +197,9 @@ jobs:
           cp_if "${ARTIFACTS}/macos-arm64/osx-aarch_64/JTimeSheet-${VERSION}-mac.zip" "JTimeSheet-${VERSION}-macos-arm64.zip"
           cp_if "${ARTIFACTS}/macos-arm64/osx-aarch_64/assets/JTimeSheet_${VERSION}.dmg" "JTimeSheet_${VERSION}-macos-arm64.dmg"
           cp_if "${ARTIFACTS}/macos-arm64/osx-aarch_64/JTimeSheet_${VERSION}.pkg" "JTimeSheet_${VERSION}-macos-arm64.pkg"
-          # macOS Intel (DMG im Root laut Debug)
+          # macOS Intel (DMG in assets/)
           cp_if "${ARTIFACTS}/macos-intel/JTimeSheet-${VERSION}-mac.zip" "JTimeSheet-${VERSION}-macos-x64.zip"
-          cp_if "${ARTIFACTS}/macos-intel/JTimeSheet_${VERSION}.dmg" "JTimeSheet_${VERSION}-macos-x64.dmg"
+          cp_if "${ARTIFACTS}/macos-intel/assets/JTimeSheet_${VERSION}.dmg" "JTimeSheet_${VERSION}-macos-x64.dmg"
           cp_if "${ARTIFACTS}/macos-intel/JTimeSheet_${VERSION}.pkg" "JTimeSheet_${VERSION}-macos-x64.pkg"
           # Windows
           cp_if "${ARTIFACTS}/windows/JTimeSheet-${VERSION}-windows.zip" "JTimeSheet-${VERSION}-windows-x64.zip"
@@ -218,7 +218,7 @@ jobs:
           VERSION="${{ env.VERSION }}"
           # Explizite Reihenfolge, fehlende Dateien werden übersprungen (kein Abbruch)
           release_assets=()
-          add_if_exists() { if [ -f "$1" ]; then release_assets+=( "$1" ); fi; }
+          add_if_exists() { if [ -f "$1" ]; then release_assets+=( "$1" ); else echo "File not found: $1"; fi; }
           add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-linux-x64.zip"
           add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-linux-x64.deb"
           add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-linux-x64.rpm"
@@ -236,6 +236,10 @@ jobs:
             exit 1
           fi
           echo "Uploading ${#release_assets[@]} asset(s) in order: Linux → macOS ARM64 → macOS Intel → Windows"
+          echo "=== release_assets (add_if_exists hat hinzugefügt) ==="
+          for i in "${!release_assets[@]}"; do
+            echo "  [$i] ${release_assets[$i]}"
+          done
           cat << 'NOTES' | sed 's/^          //' > release-notes.md
           ## Downloads
 
