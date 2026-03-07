@@ -168,6 +168,20 @@ jobs:
         id: get_version
         run: echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_ENV
 
+      - name: Debug – Artifact-Struktur anzeigen
+        run: |
+          echo "=== Verzeichnisstruktur unter ./artifacts ==="
+          find ./artifacts -type d | head -30
+          echo ""
+          echo "=== Alle JTimeSheet-Dateien (erste 50) ==="
+          find ./artifacts -type f -path "*JTimeSheet*" | head -50
+          echo ""
+          echo "=== Alle Dateien pro Artifact-Ordner ==="
+          for d in linux windows macos-arm64 macos-intel; do
+            echo "--- artifacts/$d ---"
+            find ./artifacts/$d -type f 2>/dev/null | head -20
+          done
+
       - name: Copy release artifacts (whitelist only)
         run: |
           mkdir -p ./artifacts/release
