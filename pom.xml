@@ -64,6 +64,13 @@
 			<resource>
 				<directory>${project.build.directory}/generated-resources</directory>
 			</resource>
+			<resource>
+				<directory>${project.basedir}/src/main/deploy/icon-build</directory>
+				<targetPath>treimers/net/jtimesheet</targetPath>
+				<includes>
+					<include>JTimeSheet_128x128.png</include>
+				</includes>
+			</resource>
 		</resources>
 		<extensions>
 			<!-- os maven plugin, generates the property os.detected.name with value 
@@ -193,6 +200,7 @@
 								<windowHeight>253</windowHeight>
 							</macConfig>
 							<winConfig>
+								<icoFile>${project.basedir}/src/main/deploy/package/windows/JTimeSheet.ico</icoFile>
 								<companyName>Thorsten Reimers</companyName>
 								<createDesktopIconTask>true</createDesktopIconTask>
 								<fileDescription>vcard</fileDescription>
