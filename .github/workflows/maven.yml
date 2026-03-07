@@ -178,19 +178,19 @@ jobs:
           }
           # Linux: Dateien direkt unter artifacts/linux/ (JTimeSheet_1.0.deb, nicht -linux)
           copy_if_exists ./artifacts/linux "JTimeSheet-*-linux.zip" "JTimeSheet-${VERSION}-linux-x64.zip"
-          copy_if_exists ./artifacts/linux "JTimeSheet_*.deb" "JTimeSheet_${VERSION}-linux.deb"
-          copy_if_exists ./artifacts/linux "JTimeSheet_*.rpm" "JTimeSheet_${VERSION}-linux.rpm"
+          copy_if_exists ./artifacts/linux "JTimeSheet_*.deb" "JTimeSheet_${VERSION}-linux-x64.deb"
+          copy_if_exists ./artifacts/linux "JTimeSheet_*.rpm" "JTimeSheet_${VERSION}-linux-x64.rpm"
           # macOS: Dateien unter osx/ oder osx/assets/ (JTimeSheet-1.0-mac.zip, JTimeSheet_1.0.dmg)
-          copy_if_exists ./artifacts/macos-arm64 "JTimeSheet-*-mac.zip" "JTimeSheet-${VERSION}-mac-macos-arm64.zip"
+          copy_if_exists ./artifacts/macos-arm64 "JTimeSheet-*-mac.zip" "JTimeSheet-${VERSION}-macos-arm64.zip"
           copy_if_exists ./artifacts/macos-arm64 "JTimeSheet_*.dmg" "JTimeSheet_${VERSION}-macos-arm64.dmg"
           copy_if_exists ./artifacts/macos-arm64 "JTimeSheet_*.pkg" "JTimeSheet_${VERSION}-macos-arm64.pkg"
           copy_if_exists ./artifacts/macos-intel "JTimeSheet-*-mac.zip" "JTimeSheet-${VERSION}-macos-x64.zip"
-          copy_if_exists ./artifacts/macos-intel "JTimeSheet_*.dmg" "JTimeSheet_${VERSION}-macos-intel.dmg"
-          copy_if_exists ./artifacts/macos-intel "JTimeSheet_*.pkg" "JTimeSheet_${VERSION}-macos-intel.pkg"
+          copy_if_exists ./artifacts/macos-intel "JTimeSheet_*.dmg" "JTimeSheet_${VERSION}-macos-x64.dmg"
+          copy_if_exists ./artifacts/macos-intel "JTimeSheet_*.pkg" "JTimeSheet_${VERSION}-macos-x64.pkg"
           # Windows: JTimeSheet_${VERSION}-.exe (Installer), nicht JTimeSheet-windows.exe (Launcher)
           copy_if_exists ./artifacts/windows "JTimeSheet-*-windows.zip" "JTimeSheet-${VERSION}-windows-x64.zip"
-          copy_if_exists ./artifacts/windows "JTimeSheet_*.exe" "JTimeSheet_${VERSION}-windows.exe"
-          copy_if_exists ./artifacts/windows "JTimeSheet_*.msi" "JTimeSheet_${VERSION}-windows.msi"
+          copy_if_exists ./artifacts/windows "JTimeSheet_*.exe" "JTimeSheet_${VERSION}-windows-x64.exe"
+          copy_if_exists ./artifacts/windows "JTimeSheet_*.msi" "JTimeSheet_${VERSION}-windows-x64.msi"
 
       - name: Create GitHub Release with gh CLI
         env:
@@ -202,17 +202,17 @@ jobs:
           release_assets=()
           add_if_exists() { if [ -f "$1" ]; then release_assets+=( "$1" ); fi; }
           add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-linux-x64.zip"
-          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-linux.deb"
-          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-linux.rpm"
-          add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-mac-macos-arm64.zip"
+          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-linux-x64.deb"
+          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-linux-x64.rpm"
+          add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-macos-arm64.zip"
           add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-macos-arm64.dmg"
           add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-macos-arm64.pkg"
           add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-macos-x64.zip"
-          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-macos-intel.dmg"
-          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-macos-intel.pkg"
+          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-macos-x64.dmg"
+          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-macos-x64.pkg"
           add_if_exists "$RELEASE_DIR/JTimeSheet-${VERSION}-windows-x64.zip"
-          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-windows.exe"
-          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-windows.msi"
+          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-windows-x64.exe"
+          add_if_exists "$RELEASE_DIR/JTimeSheet_${VERSION}-windows-x64.msi"
           if [ ${#release_assets[@]} -eq 0 ]; then
             echo "No release artifacts found in $RELEASE_DIR/"
             exit 1
