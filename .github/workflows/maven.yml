@@ -200,7 +200,7 @@ jobs:
           # Build asset list in grouped order with display labels (Linux → macOS ARM64 → macOS Intel → Windows)
           # gh CLI syntax: path#Display Label
           release_assets=()
-          add_asset() { [ -f "$1" ] && release_assets+=( "$1#$2" ); }
+          add_asset() { if [ -f "$1" ]; then release_assets+=( "$1#$2" ); fi; }
           # Linux
           add_asset "$RELEASE_DIR/JTimeSheet-${VERSION}-linux-linux.zip" "Linux (ZIP)"
           add_asset "$RELEASE_DIR/JTimeSheet_${VERSION}-linux.deb" "Linux (DEB)"
