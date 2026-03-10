@@ -6,7 +6,7 @@ import java.util.EnumSet;
 import java.util.Set;
 
 public class AppSettings {
-    public static final int DEFAULT_TIME_GRID_MINUTES = 1;
+    public static final int DEFAULT_TIME_GRID_MINUTES = 6;
     public static final int DEFAULT_REMINDER_INTERVAL_MINUTES = 60;
     public static final String DEFAULT_DATA_DIRECTORY = System.getProperty("user.home");
 
