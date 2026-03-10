@@ -16,7 +16,7 @@ After downloading from GitHub, Windows or macOS may block execution because the 
 
 ### macOS
 
-On macOS you may see:
+On macOS you may see.
 
 <img src="images/macOS-Security.png" alt="Security Warning" width="300">
 
@@ -28,5 +28,11 @@ On macOS you may see:
 
 ### Windows
 
+Under Windows you might get.
+
+<img src="images/Windows-Security1.png" alt="Security Warning" width="300">
+
 - For the SmartScreen warning, click **"More info"**.
 - Then select **"Run anyway"**.
+
+<img src="images/Windows-Security2.png" alt="Security Warning" width="300">
