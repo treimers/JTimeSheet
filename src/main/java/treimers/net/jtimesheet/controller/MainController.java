@@ -143,6 +143,12 @@ import treimers.net.jtimesheet.view.SettingsDialogView;
 
 public class MainController {
     private static final String DATA_FILENAME = "jtimesheet.json";
+    private static final String DEFAULT_PREFS_NODE = "net/treimers/jtimesheet";
+
+    private static String getPreferencesNode() {
+        String env = System.getenv("JTIMESHEET_PREFS_NODE");
+        return (env != null && !env.isBlank()) ? env.trim() : DEFAULT_PREFS_NODE;
+    }
     private static final DateTimeFormatter CSV_DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yy HH:mm");
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final Color TOOLBAR_ICON_COLOR = Color.web("#2563eb");
@@ -168,7 +174,7 @@ public class MainController {
     /** When reminder showed a gap and user didn't add, re-show same range (don't extend end). Cleared when user adds. */
     private LocalDateTime[] lastShownGapRange;
     private boolean activityDialogOpen;
-    private final Preferences preferences = Preferences.userRoot().node("net/treimers/jtimesheet");
+    private final Preferences preferences = Preferences.userRoot().node(getPreferencesNode());
     private final SettingsService settingsService;
     private final StorageService storageService;
     private boolean restoringPreferences;
